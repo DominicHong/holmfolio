@@ -8,7 +8,7 @@
         :style="{ width: currentWidth + 'px' }"
       >
         <div class="sidebar-header">
-          <span v-show="!isCollapsed" class="logo-text">NiceAMS</span>
+          <span v-show="!isCollapsed" class="logo-text">HolmFolio</span>
         </div>
 
         <el-menu

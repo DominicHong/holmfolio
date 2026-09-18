@@ -1,6 +1,6 @@
-# NiceAMS - Nice Asset Management System
+# HolmFolio
 
-NiceAMS is a comprehensive personal Asset Management System built with a Python FastAPI backend and Vue.js 3 frontend. It provides multi-currency portfolio tracking, transaction management, performance analytics (TWR, Sharpe ratio, drawdown, beta, tag correlation), and data visualization.
+HolmFolio is an evidence-based investing personal asset management system built with a Python FastAPI backend and Vue.js 3 frontend. It provides multi-currency portfolio tracking, transaction management, performance analytics (TWR, Sharpe ratio, drawdown, beta, tag correlation), and quantitative trading.
 
 ## Table of Contents
 
@@ -59,7 +59,7 @@ NiceAMS is a comprehensive personal Asset Management System built with a Python 
 ## Project Structure
 
 ```
-NiceAMS/
+holmfolio/
 ├── .trae/rules/project_rules.md   # Project coding rules
 ├── .vscode/
 ├── backend/
@@ -196,7 +196,7 @@ NiceAMS/
 - Python 3.12+
 - Node.js 22+
 - npm
-- (Optional) Conda environment named `NiceAMS`
+- (Optional) Conda environment named `holmfolio`
 - (Optional) THS (同花顺) terminal login for historical price/financial data
 - (Optional) iFinD account credentials in the repo-root `.env` for gold daily-bar updates: `IFIND_USER`, `IFIND_PASSWORD` (SDK), `IFIND_DATASOURCE_KEY` (HTTP fallback)
 
@@ -216,10 +216,10 @@ cd ..
 python -m backend.init_data
 ```
 
-By default `init_data` loads the public demo seeds from `data/sample/` (`assets.csv`, `asset_tags.csv`, `transactions.csv`). To initialize with your own seeds instead, point `NICEAMS_SEED_DIR` at a directory containing the same three file names, for example:
+By default `init_data` loads the public demo seeds from `data/sample/` (`assets.csv`, `asset_tags.csv`, `transactions.csv`). To initialize with your own seeds instead, point `HOLMFOLIO_SEED_DIR` at a directory containing the same three file names, for example:
 
 ```bash
-NICEAMS_SEED_DIR=data/private python -m backend.init_data
+HOLMFOLIO_SEED_DIR=data/private python -m backend.init_data
 ```
 
 `data/private/` is gitignored and is a good place for real seeds.

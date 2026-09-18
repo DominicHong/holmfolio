@@ -1,6 +1,6 @@
 # 收益率计算算法说明
 
-本文档详细记录 NiceAMS 中三种核心收益率计算的方法论：组合 TWR、标签加权价格收益率（用于 Tag Correlation 和 Tag Beta）、以及资产 Beta。
+本文档详细记录 HolmFolio 中三种核心收益率计算的方法论：组合 TWR、标签加权价格收益率（用于 Tag Correlation 和 Tag Beta）、以及资产 Beta。
 
 ---
 

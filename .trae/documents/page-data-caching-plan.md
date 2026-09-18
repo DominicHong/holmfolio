@@ -2,7 +2,7 @@
 
 ## Context
 
-Currently, every sidebar navigation in NiceAMS destroys and recreates the view component, causing `onMounted` to re-fetch all data from the backend. This creates unnecessary API traffic and slow page transitions when navigating back to a previously visited page. The user wants pages to display cached data on re-navigation, with explicit refresh controls for fetching new data.
+Currently, every sidebar navigation in holmfolio destroys and recreates the view component, causing `onMounted` to re-fetch all data from the backend. This creates unnecessary API traffic and slow page transitions when navigating back to a previously visited page. The user wants pages to display cached data on re-navigation, with explicit refresh controls for fetching new data.
 
 ## Approach: Vue `<keep-alive>` on router-view
 

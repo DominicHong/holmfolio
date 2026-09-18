@@ -1,6 +1,6 @@
 """Long-only strategy base class.
 
-Ported from holmes-lab strategies/common/base.py with two NiceAMS additions:
+Ported from holmes-lab strategies/common/base.py with two HolmFolio additions:
 - ``on_signal`` hook and a ``signals`` list so signal generation can be
   captured without changing the trading logic;
 - per-bar indicator series recording (``record_series``) for charting.
@@ -46,7 +46,7 @@ class LongOnlyStrategyBase(bt.Strategy):
         self._pending_entry = False
         self._entry_reason = ""
 
-        # Signal, fill and indicator-series recording (NiceAMS additions)
+        # Signal, fill and indicator-series recording (HolmFolio additions)
         self.signals: list[dict] = []
         self.fills: list[dict] = []
         self.series: dict[str, list[float | None]] = {}

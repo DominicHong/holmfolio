@@ -14,7 +14,7 @@ Compact guidance for OpenCode sessions working in this repo. Read alongside `REA
 `pytest.ini` sets `pythonpath = . backend`; `backend/db/base.py` resolves `DATA_PATH` as `<repo_root>/data` and the DB as `backend/portfolio.db`. Running commands from inside `backend/` breaks imports and path resolution.
 
 ```bash
-# Backend: init DB (wipes backend/portfolio.db and reloads seeds from data/sample/; set NICEAMS_SEED_DIR to use another dir, e.g. data/private/)
+# Backend: init DB (wipes backend/portfolio.db and reloads seeds from data/sample/; set HOLMFOLIO_SEED_DIR to use another dir, e.g. data/private/)
 python -m backend.init_data
 
 # Backend dev server (http://localhost:8000, Swagger at /docs)
@@ -63,7 +63,7 @@ pytest --cov=backend                # coverage
 - **Data sources**: `akshare_source` (AKShare, no login, has fallback maps for failed APIs) and `ths_source` (THS/同花顺, requires terminal login, has reconnection logic) — both module-level singletons in `backend/data_source.py`.
 - **HK stock cache**: `data/hk_stock_cache.json` maps normalized HK symbols (e.g. `0941.HK`) to red-chip / A+H dual-listing info (`is_red_chip`, `is_dual_listed`, `a_share_symbol`). `backend/data_source.py` reads it in `get_dividend_after_tax_past_year` to compute HK dividend tax; no AI calls at runtime. Missing entries default to no-tax-adjustment.
 - **Cash asset convention**: symbol `{CCY}_CASH` (e.g. `CNY_CASH`).
-- **Seed data**: `backend/init_data.py` reads `assets.csv`, `asset_tags.csv`, and `transactions.csv` from `data/sample/` by default; `NICEAMS_SEED_DIR` overrides the directory. `data/private/` (gitignored) holds the owner's real seeds. `tags.csv` / `tag_categories.csv` always come from `data/`.
+- **Seed data**: `backend/init_data.py` reads `assets.csv`, `asset_tags.csv`, and `transactions.csv` from `data/sample/` by default; `HOLMFOLIO_SEED_DIR` overrides the directory. `data/private/` (gitignored) holds the owner's real seeds. `tags.csv` / `tag_categories.csv` always come from `data/`.
 - **Tag categories are named in Chinese**: 行业 / 地域 / 资产类型 / 风格.
 - **Xueqiu import**: auto-detects encoding (gbk/gb2312/utf-8/utf-8-sig/gb18030) and rewrites symbols (`SZ`→`.SZ`, `SH`→`.SH`, 5-digit→`.HK`). ZIP files with `交易记录` + `转账记录` sections supported.
 

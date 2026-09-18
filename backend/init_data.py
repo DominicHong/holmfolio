@@ -33,7 +33,7 @@ from backend.services import (
 )
 from backend import logger
 
-SEED_DIR = os.environ.get("NICEAMS_SEED_DIR", os.path.join(DATA_PATH, "sample"))
+SEED_DIR = os.environ.get("HOLMFOLIO_SEED_DIR", os.path.join(DATA_PATH, "sample"))
 
 
 def init_currencies_and_cash_assets():
