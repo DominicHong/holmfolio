@@ -1,0 +1,110 @@
+{
+  "0811.HK": {
+    "symbol": "0811.HK",
+    "is_red_chip": false,
+    "is_dual_listed": true,
+    "a_share_symbol": "601811.SH"
+  },
+  "0700.HK": {
+    "symbol": "0700.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "0941.HK": {
+    "symbol": "0941.HK",
+    "is_red_chip": true,
+    "is_dual_listed": true,
+    "a_share_symbol": "600941.SH"
+  },
+  "0288.HK": {
+    "symbol": "0288.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "9626.HK": {
+    "symbol": "9626.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "0177.HK": {
+    "symbol": "0177.HK",
+    "is_red_chip": false,
+    "is_dual_listed": true,
+    "a_share_symbol": "600377.SH"
+  },
+  "1810.HK": {
+    "symbol": "1810.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "3818.HK": {
+    "symbol": "3818.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "0598.HK": {
+    "symbol": "0598.HK",
+    "is_red_chip": false,
+    "is_dual_listed": true,
+    "a_share_symbol": "601598.SH"
+  },
+  "0837.HK": {
+    "symbol": "0837.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "3918.HK": {
+    "symbol": "3918.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "0939.HK": {
+    "symbol": "0939.HK",
+    "is_red_chip": false,
+    "is_dual_listed": true,
+    "a_share_symbol": "601939.SH"
+  },
+  "0883.HK": {
+    "symbol": "0883.HK",
+    "is_red_chip": true,
+    "is_dual_listed": true,
+    "a_share_symbol": "600938.SH"
+  },
+  "0363.HK": {
+    "symbol": "0363.HK",
+    "is_red_chip": true,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "1088.HK": {
+    "symbol": "1088.HK",
+    "is_red_chip": false,
+    "is_dual_listed": true,
+    "a_share_symbol": "601088.SH"
+  },
+  "0083.HK": {
+    "symbol": "0083.HK",
+    "is_red_chip": false,
+    "is_dual_listed": false,
+    "a_share_symbol": null
+  },
+  "3618.HK": {
+    "symbol": "3618.HK",
+    "is_red_chip": false,
+    "is_dual_listed": true,
+    "a_share_symbol": "601077.SH"
+  },
+  "0981.HK": {
+    "symbol": "0981.HK",
+    "is_red_chip": true,
+    "is_dual_listed": true,
+    "a_share_symbol": "688981.SH"
+  }
+}

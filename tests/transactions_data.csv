@@ -1,0 +1,26 @@
+trade_date,action,symbol,name,quantity,price,amount,fees,notes
+2025/1/1,cash_in,CNY_CASH,Chinese Yuan Cash,300000,1,300000,0,Initial capital
+2025/1/5,buy,600036.SH,China Merchants Bank,1000,35.2,35200,0,Buy CMB shares
+2025/1/9,cash_out,CNY_CASH,Chinese Yuan Cash,184000,1,184000,0,Currency exchange: Sell CNY
+2025/1/9,cash_in,HKD_CASH,Hong Kong Dollar Cash,200000,1,200000,0,Currency exchange: Buy HKD
+2025/1/11,buy,00700.HK,Tencent Holdings,500,380,190000,0,Buy Tencent shares
+2025/2/1,cash_in,CNY_CASH,Chinese Yuan Cash,100000,1,100000,0,Add CNY capital
+2025/2/7,dividends,600036.SH,China Merchants Bank,100,1,100,0,Receive CMB dividends
+2025/2/8,cash_out,HKD_CASH,Hong Kong Dollar Cash,10000,1,10000,0,Currency exchange: Remove HKD capital
+2025/2/10,sell,600036.SH,China Merchants Bank,1000,48,48000,0,Sell CMB shares
+2025/2/11,sell,00700.HK,Tencent Holdings,100,400,40000,0,Sell Tencent shares
+2025/2/12,buy,510300.SH,CSI 300 ETF,10000,3.8,38000,0,Buy CSI 300 ETF
+2025/2/18,cash_in,CNY_CASH,Chinese Yuan Cash,50000,1,50000,0,Add CNY capital
+2025/2/20,sell,510300.SH,CSI 300 ETF,5000,4.5,22500,0,Sell CSI 300 ETF
+2025/2/20,cash_out,CNY_CASH,Chinese Yuan Cash,22500,1,22500,0,Remove CNY capital
+2025/2/25,cash_out,CNY_CASH,Chinese Yuan Cash,100000,1,100000,0,Remove CNY capital
+2025/2/27,buy,600036.SH,China Merchants Bank,800,40,32000,0,Buy CMB shares
+2025/2/27,cash_in,CNY_CASH,Chinese Yuan Cash,40000,1,40000,0,Add CNY capital
+2025/3/3,cash_in,CNY_CASH,Chinese Yuan Cash,1000,1,1000,0,Add CNY capital
+2025/3/3,cash_out,HKD_CASH,Hong Kong Dollar Cash,40000,1,40000,0,Currency exchange: Sell HKD
+2025/3/3,cash_in,CNY_CASH,Chinese Yuan Cash,36800,1,36800,0,Currency exchange: Buy CNY
+2025/3/5,sell,600036.SH,China Merchants Bank,800,42,33600,0,Sell CMB shares
+2025/3/5,sell,00700.HK,Tencent Holdings,400,435,174000,0,Sell Tencent shares
+2025/3/5,sell,510300.SH,CSI 300 ETF,5000,4,20000,0,Sell CSI 300 ETF
+2025/3/5,cash_out,CNY_CASH,Chinese Yuan Cash,240300,1,240300,0,Remove CNY capital
+2025/3/5,cash_out,HKD_CASH,Hong Kong Dollar Cash,174000,1,174000,0,Currency exchange: Remove HKD capital

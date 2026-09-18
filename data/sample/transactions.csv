@@ -1,0 +1,10 @@
+名称,代码,类型,日期,成交价,数量,金额,说明
+人民币,CNY_CASH,现金转入,2025/1/1,1,300000,300000,Initial capital
+招商银行,SH600036,买入,2025/1/5,35.2,1000,35200,Buy CMB shares
+人民币,CNY_CASH,现金转出,2025/1/9,1,184000,184000,Currency exchange: Sell CNY
+港币,HKD_CASH,现金转入,2025/1/9,1,200000,200000,Currency exchange: Buy HKD
+腾讯控股,00700,买入,2025/1/10,380,500,190000,Buy Tencent shares
+招商银行,SH600036,除权除息,2025/2/7,1,100,100,Receive CMB dividends
+招商银行,SH600036,卖出,2025/2/10,36,1000,36000,Sell CMB shares
+腾讯控股,00700,卖出,2025/2/11,400,100,40000,Sell Tencent shares
+华泰柏瑞沪深300ETF,SH510300,买入,2025/2/12,3.8,10000,38000,Buy CSI 300 ETF
