@@ -92,6 +92,10 @@ class TestGoldService:
 
     def test_overview_normalized_nav_curves(self, test_db, gold_data):
         asset, portfolio = gold_data
+        test_db.add(
+            Settings(key="gold_initial_capital", value="1000000", description="test")
+        )
+        test_db.commit()
 
         with GoldService(test_db) as service:
             result = service.get_overview(
@@ -241,6 +245,11 @@ class TestGoldService:
             day += timedelta(days=1)
         test_db.commit()
 
+        test_db.add(
+            Settings(key="gold_initial_capital", value="1000000", description="test")
+        )
+        test_db.commit()
+
         with GoldService(test_db) as service:
             baseline = service.run_model(asset.id, "s1a_ma_cross_trailing")
 
@@ -253,7 +262,11 @@ class TestGoldService:
         first_buy = next(fill for fill in baseline["fills"] if fill["action"] == "buy")
         assert first_buy["size"] * first_buy["price"] <= 1_000_000
 
-        test_db.add(Settings(key="gold_initial_capital", value="10000", description="test"))
+        setting = test_db.exec(
+            select(Settings).where(Settings.key == "gold_initial_capital")
+        ).first()
+        setting.value = "10000"
+        test_db.add(setting)
         test_db.commit()
 
         with GoldService(test_db) as service:

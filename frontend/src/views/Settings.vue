@@ -317,7 +317,7 @@ const currencySettings = ref({
 const portfolioSettings = ref({
   tax_rate: 0.2,
   risk_free_rate: 1.5,
-  gold_initial_capital: 1000000
+  gold_initial_capital: 10000
 })
 const rateForm = ref({
   currency_id: null,

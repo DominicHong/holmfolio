@@ -222,6 +222,16 @@ By default `init_data` loads the public demo seeds from `data/sample/` (`assets.
 HOLMFOLIO_SEED_DIR=data/private python -m backend.init_data
 ```
 
+On Windows, the inline `VAR=value` syntax above only works in Git Bash. Use the equivalent for PowerShell or cmd:
+
+```powershell
+$env:HOLMFOLIO_SEED_DIR="data/private"; python -m backend.init_data
+```
+
+```cmd
+set "HOLMFOLIO_SEED_DIR=data/private" && python -m backend.init_data
+```
+
 `data/private/` is gitignored and is a good place for real seeds.
 
 3. **Start the FastAPI server**:

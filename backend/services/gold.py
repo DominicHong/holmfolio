@@ -15,14 +15,14 @@ from sqlmodel import Session, select
 from backend import logger
 from backend.db.models import Asset, Price, Settings, Transaction
 from backend.services.base import BaseService
-from backend.strat.common.constants import COMMISSION_RATE, INITIAL_CASH
+from backend.strat.common.constants import COMMISSION_RATE
 from backend.strat.common.data_loader import DATASETS, load_daily_csv, update_daily
 from backend.strat.common.engine import run_gold_backtest
 from backend.strat.gold import DEFAULT_STRATEGY, STRATEGIES, STRATEGY_LABELS
 
 GOLD_DATASET_ASSET_SYMBOLS = {"au9999": "AU9999.SHG", "518880": "518880.SH"}
 GOLD_INITIAL_CAPITAL_KEY = "gold_initial_capital"
-DEFAULT_GOLD_INITIAL_CAPITAL = 1_000_000.0
+DEFAULT_GOLD_INITIAL_CAPITAL = 10_000.0
 # Match CalculationService.calculate_statistics (Analytics page).
 ANALYTICS_TRADING_DAYS_PER_YEAR = 240
 DAYS_PER_YEAR = 365.25
@@ -179,7 +179,7 @@ class GoldService(BaseService):
         return run_gold_backtest(
             self._to_engine_frame(bars),
             STRATEGIES[strategy_key],
-            initial_cash=initial_capital if initial_capital > 0 else INITIAL_CASH,
+            initial_cash=initial_capital if initial_capital > 0 else DEFAULT_GOLD_INITIAL_CAPITAL,
         )
 
     def _scope_model_to_window(
