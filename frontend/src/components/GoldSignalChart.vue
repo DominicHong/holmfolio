@@ -14,10 +14,12 @@
 </template>
 
 <script setup lang="ts">
-import type { ChartConfiguration } from 'chart.js'
+import type { Chart, ChartConfiguration } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 import { useChart } from '../composables/useChart'
+import { buildZoomPluginOptions } from '../utils/chartZoom'
 import type { GoldSignal } from '../types/models'
 
 const props = defineProps<{
@@ -139,6 +141,7 @@ function buildConfig(): ChartConfiguration | null {
       },
       plugins: {
         legend: { display: true, position: 'top' },
+        zoom: buildZoomPluginOptions(['y'], (chart) => syncXRange(chart, positionChart.value)),
         datalabels: { display: false },
         tooltip: {
           mode: 'index',
@@ -202,6 +205,7 @@ function buildPositionConfig(): ChartConfiguration | null {
       },
       plugins: {
         legend: { display: false },
+        zoom: buildZoomPluginOptions([], (chart) => syncXRange(chart, priceChart.value)),
         datalabels: { display: false },
         tooltip: {
           mode: 'index',
@@ -220,13 +224,21 @@ function buildPositionConfig(): ChartConfiguration | null {
   }
 }
 
-useChart(chartCanvas, buildConfig, {
-  watchSource: () => [props.seriesDates, props.series, props.signals]
+const { chartInstance: priceChart } = useChart(chartCanvas, buildConfig, {
+  watchSource: () => [props.seriesDates, props.series, props.signals],
+  registerPlugins: [zoomPlugin]
 })
 
-useChart(positionCanvas, buildPositionConfig, {
-  watchSource: () => [props.seriesDates, props.series]
+const { chartInstance: positionChart } = useChart(positionCanvas, buildPositionConfig, {
+  watchSource: () => [props.seriesDates, props.series],
+  registerPlugins: [zoomPlugin]
 })
+
+// Keep the position chart aligned with the price chart's visible X range
+function syncXRange(source: Chart, target: Chart | null) {
+  if (!target) return
+  target.zoomScale('x', { min: source.scales.x.min, max: source.scales.x.max }, 'none')
+}
 </script>
 
 <style scoped>

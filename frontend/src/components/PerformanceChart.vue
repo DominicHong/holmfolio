@@ -12,9 +12,11 @@
 
 <script setup lang="ts">
 import type { ChartConfiguration } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import dayjs from 'dayjs'
 import { ref, computed } from 'vue'
 import { useChart } from '../composables/useChart'
+import { buildZoomPluginOptions } from '../utils/chartZoom'
 
 // Performance history item interface
 interface PerformanceHistoryItem {
@@ -259,6 +261,7 @@ const buildConfig = (_ctx: CanvasRenderingContext2D): ChartConfiguration | null 
           display: true,
           position: 'top'
         },
+        zoom: buildZoomPluginOptions(['y', 'y1']),
         datalabels: {
           display: false
         },
@@ -291,6 +294,7 @@ const buildConfig = (_ctx: CanvasRenderingContext2D): ChartConfiguration | null 
 
 useChart(performanceChart, buildConfig, {
   watchSource: () => props.performanceHistory,
+  registerPlugins: [zoomPlugin],
 })
 </script>
 

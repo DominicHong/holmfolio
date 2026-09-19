@@ -9,9 +9,11 @@
 
 <script setup lang="ts">
 import type { ChartConfiguration } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 import { useChart } from '../composables/useChart'
+import { buildZoomPluginOptions } from '../utils/chartZoom'
 import type { GoldPerformance } from '../types/models'
 
 const props = defineProps<{
@@ -78,6 +80,7 @@ const buildConfig = (): ChartConfiguration | null => {
       },
       plugins: {
         legend: { display: true, position: 'top' },
+        zoom: buildZoomPluginOptions(),
         datalabels: { display: false },
         tooltip: {
           mode: 'index',
@@ -96,7 +99,8 @@ const buildConfig = (): ChartConfiguration | null => {
 }
 
 useChart(chartCanvas, buildConfig, {
-  watchSource: () => props.performance
+  watchSource: () => props.performance,
+  registerPlugins: [zoomPlugin]
 })
 </script>
 

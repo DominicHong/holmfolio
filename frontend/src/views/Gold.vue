@@ -59,7 +59,7 @@
       </el-form>
     </el-card>
 
-    <el-row :gutter="16" class="cards-row">
+    <el-row :gutter="20" class="cards-row">
       <el-col :span="6">
         <OverviewCard
           title="Latest Signal"
@@ -124,28 +124,42 @@
           <span class="chart-subtitle">Sharpe uses Settings risk-free rate ({{ formatPercentage(performance?.risk_free_rate) }})</span>
         </div>
       </template>
-      <el-table :data="metricRows" size="small" stripe>
+      <el-table :data="metricRows" class="gold-table">
         <el-table-column prop="label" label="Series" min-width="180" />
         <el-table-column label="Total Return" align="right" min-width="120">
           <template #default="{ row }">
-            <span :class="row.total_return >= 0 ? 'positive' : 'negative'">{{ formatPercentage(row.total_return) }}</span>
+            <span class="num-value" :class="row.total_return >= 0 ? 'positive' : 'negative'">{{ formatPercentage(row.total_return) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="Annualized" align="right" min-width="110">
-          <template #default="{ row }">{{ row.annualized_return === null ? 'N/A' : formatPercentage(row.annualized_return) }}</template>
+          <template #default="{ row }">
+            <span class="num-value">{{ row.annualized_return === null ? 'N/A' : formatPercentage(row.annualized_return) }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="Max Drawdown" align="right" min-width="120">
-          <template #default="{ row }">{{ formatPercentage(row.max_drawdown) }}</template>
+          <template #default="{ row }">
+            <span class="num-value">{{ formatPercentage(row.max_drawdown) }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="Volatility" align="right" min-width="100">
-          <template #default="{ row }">{{ formatPercentage(row.volatility) }}</template>
+          <template #default="{ row }">
+            <span class="num-value">{{ formatPercentage(row.volatility) }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="Sharpe" align="right" min-width="90">
-          <template #default="{ row }">{{ formatNumber(row.sharpe, 2) }}</template>
+          <template #default="{ row }">
+            <span class="num-value">{{ formatNumber(row.sharpe, 2) }}</span>
+          </template>
         </el-table-column>
-        <el-table-column prop="trades" label="Trades" align="right" min-width="80" />
+        <el-table-column prop="trades" label="Trades" align="right" min-width="80">
+          <template #default="{ row }">
+            <span class="num-value">{{ row.trades }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="Win Rate" align="right" min-width="90">
-          <template #default="{ row }">{{ row.win_rate === null ? 'N/A' : formatPercentage(row.win_rate) }}</template>
+          <template #default="{ row }">
+            <span class="num-value">{{ row.win_rate === null ? 'N/A' : formatPercentage(row.win_rate) }}</span>
+          </template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -157,7 +171,7 @@
           <span class="chart-subtitle">{{ signalRows.length }} signals</span>
         </div>
       </template>
-      <SharedDataTable :data="signalRows" :columns="signalColumns" :loading="loading" empty-text="No signals yet" />
+      <SharedDataTable class="gold-table" :data="signalRows" :columns="signalColumns" :loading="loading" empty-text="No signals yet" />
     </el-card>
 
     <el-card class="table-card">
@@ -168,6 +182,7 @@
         </div>
       </template>
       <SharedDataTable
+        class="gold-table"
         :data="userTransactions"
         :columns="transactionColumns"
         :loading="loading"
@@ -596,59 +611,82 @@ onMounted(async () => {
 }
 
 .empty-alert {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
-.filter-card {
-  margin-bottom: 16px;
+.filter-card,
+.chart-card,
+.table-card {
+  margin-bottom: 20px;
   border: none;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
 
 .filter-card :deep(.el-card__body) {
   padding-bottom: 0;
 }
 
+.filter-card :deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
+
 .cards-row {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
-.chart-card {
-  margin-bottom: 16px;
-  border: none;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
-}
-
-.table-card {
-  margin-bottom: 16px;
-  border: none;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+.chart-card :deep(.el-card__header),
+.table-card :deep(.el-card__header) {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ed 100%);
+  border-bottom: 1px solid #e6e6e6;
 }
 
 .chart-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
+  margin: 0;
 }
 
 .chart-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: #303133;
 }
 
 .chart-subtitle {
-  font-size: 12px;
+  font-size: 13px;
   color: #909399;
 }
 
+.gold-table :deep(.el-table__header th) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+}
+
+.gold-table :deep(.el-table__body td) {
+  font-size: 14px;
+  padding: 12px 0;
+}
+
+.num-value {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .positive {
-  color: #67c23a;
-  font-weight: 500;
+  color: #1f883d;
 }
 
 .negative {
-  color: #f56c6c;
-  font-weight: 500;
+  color: #cf222e;
 }
 </style>
