@@ -1594,7 +1594,11 @@ class THSDataSource:
                 )
             logger.error(f"THS fetch historical prices failed: {ths_result.errmsg}")
             return pd.DataFrame(), ""
-        
+
+        if ths_result.data is None or ths_result.data.empty:
+            logger.debug(f"No data returned from THS for {symbol} ({start_str}~{end_str})")
+            return pd.DataFrame(), ""
+
         df = ths_result.data.rename(columns={"time": "date"})
         df["date"] = pd.to_datetime(df["date"]).dt.date
         df = df[(df["date"] >= start_date) & (df["date"] <= end_date)]
@@ -1711,7 +1715,10 @@ class IFindHTTPDataSource:
             },
             {
                 "codes": code,
-                "indicators": ",".join(DAILY_BAR_FIELDS),
+                "indicators": ",".join(
+                    "amount" if field == "amt" else field
+                    for field in DAILY_BAR_FIELDS
+                ),
                 "startdate": start_date.strftime("%Y-%m-%d"),
                 "enddate": end_date.strftime("%Y-%m-%d"),
             },
@@ -1729,6 +1736,9 @@ class IFindHTTPDataSource:
             return pd.DataFrame()
 
         table = tables[0]
+        if not table.get("table") or not table.get("time"):
+            return pd.DataFrame()
+
         df = pd.DataFrame(table["table"])
         df["date"] = table["time"]
         return normalize_daily_bars(df, start_date, end_date)
