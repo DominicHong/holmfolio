@@ -688,8 +688,13 @@ class THSDataSource:
             return
 
         super().__init__()
-        self._login()
+        self.login_status: int | None = None
         THSDataSource._initialized = True
+
+    def _ensure_login(self) -> None:
+        """Login on the first THS API call instead of at import time."""
+        if self.login_status != 0:
+            self._login()
 
     def _login(self) -> int:
         """Login to THS using the iFinD credentials from the repo root .env."""
@@ -1189,6 +1194,7 @@ class THSDataSource:
             ``None`` if the data cannot be read.
         """
         # "BB" for original currency
+        self._ensure_login()
         ths_result = THS_BD(symbol, "divi_per_share_btax_exspecial", f"{report_date},BB")
         if ths_result.errorcode != 0:
             if retry and self._reconnect_if_needed(ths_result.errorcode):
@@ -1244,6 +1250,7 @@ class THSDataSource:
         Returns:
             Cumulative net income in CNY, or None if failed or not available.
         """
+        self._ensure_login()
         ths_result = THS_BD(symbol, "ni_attr_to_cs", f"{report_date},1,CNY")
         if ths_result.errorcode != 0:
             if retry and self._reconnect_if_needed(ths_result.errorcode):
@@ -1511,6 +1518,7 @@ class THSDataSource:
         indicators = "total_shares;equity_belong_to_parent"
         symbols_str = ",".join(normalized_symbols)
 
+        self._ensure_login()
         ths_result = THS_BD(symbols_str, indicators, params)
         if ths_result.errorcode != 0:
             if retry and self._reconnect_if_needed(ths_result.errorcode):
@@ -1581,6 +1589,7 @@ class THSDataSource:
             case _:  # 不复权
                 params = ""
         
+        self._ensure_login()
         match asset_type:
             case "bond":
                 ths_result = THS_HQ(symbol, 'close', "PriceType:2", start_str, end_str)
@@ -1628,6 +1637,7 @@ class THSDataSource:
             or an empty DataFrame when unavailable.
         """
         fields = ";".join(DAILY_BAR_FIELDS)
+        self._ensure_login()
         ths_result = THS_HD(
             code,
             fields,

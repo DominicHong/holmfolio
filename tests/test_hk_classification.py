@@ -2,9 +2,9 @@
 
 Mocks the AI classification step and the OpenCode endpoint; no network or
 real THS SDK required. The THSDataSource singleton is created at import time
-(backend.data_source is imported by conftest / other tests); in the mock
-environment the THS login simply logs an error and continues, so reusing the
-module-level ``ths_source`` instance is safe.
+(backend.data_source is imported by conftest / other tests); THS login is
+deferred until the first THS API call, so reusing the module-level
+``ths_source`` instance is safe.
 """
 
 import json
