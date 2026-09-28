@@ -15,7 +15,6 @@ from sqlmodel import Session, select
 from backend import logger
 from backend.db.models import Asset, Price, Settings, Transaction
 from backend.services.base import BaseService
-from backend.strat.common.constants import COMMISSION_RATE
 from backend.strat.common.data_loader import DATASETS, load_daily_csv, update_daily
 from backend.strat.common.engine import run_gold_backtest
 from backend.strat.gold import DEFAULT_STRATEGY, STRATEGIES, STRATEGY_LABELS
@@ -150,8 +149,21 @@ class GoldService(BaseService):
         return frame[["open", "high", "low", "close", "volume", "openinterest"]]
 
     # ---------- signal/model ----------
-    def run_model(self, asset_id: int, strategy_key: str) -> dict:
-        """Run a strategy over the full bar history for an asset.
+    def run_model(
+        self,
+        asset_id: int,
+        strategy_key: str,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> dict:
+        """Run a strategy for an asset, optionally scoped to a date window.
+
+        When ``start_date`` is given, bars before it only warm up the
+        indicators and the account stays flat, so the simulation starts fresh
+        at the window start with fully warmed indicators and the entry pending
+        at the last pre-window close fills at the first window bar's open.
+        Bars after ``end_date`` are dropped, so no fill can occur outside the
+        window. Without dates the run covers the full stored history.
 
         The model account is sized with the configured gold initial capital so
         that every recorded fill holds real units for that account; no
@@ -164,6 +176,8 @@ class GoldService(BaseService):
             raise ValueError(f"Unknown gold strategy: {strategy_key}")
 
         bars = self.get_daily_bars(asset_id)
+        if end_date is not None and not bars.empty:
+            bars = bars[bars["date"] <= end_date]
         if bars.empty:
             return {
                 "nav_dates": [],
@@ -180,191 +194,8 @@ class GoldService(BaseService):
             self._to_engine_frame(bars),
             STRATEGIES[strategy_key],
             initial_cash=initial_capital if initial_capital > 0 else DEFAULT_GOLD_INITIAL_CAPITAL,
+            trade_start_date=start_date,
         )
-
-    def _scope_model_to_window(
-        self,
-        model: dict,
-        bars: pd.DataFrame,
-        initial_capital: float,
-        start_date: date | None,
-        end_date: date | None,
-    ) -> dict:
-        """Re-simulate the model account inside the window with fresh capital.
-
-        Signal dates and execution prices come from the warm full-history
-        backtest, but the account restarts at ``initial_capital`` on the window
-        start date: every in-window fill is re-sized against the cash actually
-        available at that moment, so units can never exceed the account.
-        """
-        if bars.empty or model.get("model_state") is None:
-            return model
-
-        window_start = start_date or bars["date"].iloc[0]
-        window_end = end_date or bars["date"].iloc[-1]
-        window_bars = bars[(bars["date"] >= window_start) & (bars["date"] <= window_end)]
-        if window_bars.empty:
-            return model
-
-        # 1) Replay the recorded fills (date + price) against the window account.
-        cash = initial_capital
-        units = 0.0
-        replay_fills: list[dict] = []
-        for fill in model.get("fills", []):
-            if not (window_start <= fill["date"] <= window_end):
-                continue
-            price = float(fill["price"])
-            if price <= 0:
-                continue
-            if fill["action"] == "buy" and units <= 0:
-                size = int(cash / (price * (1 + COMMISSION_RATE)))
-                if size <= 0:
-                    continue
-                commission = size * price * COMMISSION_RATE
-                cash -= size * price + commission
-                units = float(size)
-                replay_fills.append(
-                    {
-                        **fill,
-                        "size": units,
-                        "commission": commission,
-                        "position": units,
-                        "cash": cash,
-                    }
-                )
-            elif fill["action"] == "sell" and units > 0:
-                proceeds = units * price
-                commission = proceeds * COMMISSION_RATE
-                cash += proceeds - commission
-                replay_fills.append(
-                    {
-                        **fill,
-                        "size": units,
-                        "commission": commission,
-                        "position": 0.0,
-                        "cash": cash,
-                    }
-                )
-                units = 0.0
-
-        # 2) Mark the account daily and record the position percentage.
-        fills_by_date: dict[date, list[dict]] = {}
-        for fill in replay_fills:
-            fills_by_date.setdefault(fill["date"], []).append(fill)
-
-        nav_dates: list[date] = []
-        nav_values: list[float] = []
-        position_pct_by_date: dict[date, float] = {}
-        cash = initial_capital
-        units = 0.0
-        for row in window_bars.itertuples(index=False):
-            for fill in fills_by_date.get(row.date, []):
-                cash = fill["cash"]
-                units = fill["position"]
-            equity = cash + units * float(row.close)
-            nav_dates.append(row.date)
-            nav_values.append(equity / initial_capital * 100 if initial_capital else 0.0)
-            position_pct_by_date[row.date] = (
-                units * float(row.close) / equity * 100 if equity else 0.0
-            )
-
-        # 3) Annotate signals with the units actually traded in the window.
-        replay_by_key = {(fill["date"], fill["action"]): fill for fill in replay_fills}
-        signals: list[dict] = []
-        for signal in model.get("signals", []):
-            in_window = window_start <= signal["signal_date"] <= window_end or (
-                signal["exec_date"] is not None
-                and window_start <= signal["exec_date"] <= window_end
-            )
-            if not in_window:
-                signals.append(signal)
-                continue
-            fill = replay_by_key.get((signal["exec_date"], signal["action"]))
-            if fill is not None:
-                signals.append({**signal, "size": fill["size"], "exec_price": fill["price"]})
-            elif signal["exec_date"] is None:
-                signals.append({**signal, "size": None})
-            else:
-                # Executed by the strategy but a no-op for the fresh account.
-                signals.append({**signal, "size": 0.0})
-
-        # 4) Rebuild round trips and the final model state for the window.
-        round_trips = self._round_trips_from_fills(replay_fills)
-        entry_fill = next(
-            (fill for fill in reversed(replay_fills) if fill["action"] == "buy"), None
-        )
-        base_state = model.get("model_state") or {}
-        is_live_window = window_end >= (base_state.get("last_bar_date") or window_end)
-        model_state = {
-            "position_size": units,
-            "entry_date": entry_fill["date"] if (entry_fill and units > 0) else None,
-            "entry_price": entry_fill["price"] if (entry_fill and units > 0) else None,
-            "stop_price": self._series_value_at(model, "stop", window_end),
-            "peak_close": None,
-            "last_bar_date": window_end,
-            "pending_signal": base_state.get("pending_signal") if is_live_window else None,
-        }
-
-        series = dict(model.get("series", {}))
-        if series.get("position_pct") is not None:
-            series["position_pct"] = [
-                position_pct_by_date.get(day, value)
-                for day, value in zip(
-                    model.get("series_dates", []), series.get("position_pct", [])
-                )
-            ]
-
-        return {
-            **model,
-            "nav_dates": nav_dates,
-            "nav_values": nav_values,
-            "fills": replay_fills,
-            "round_trips": round_trips,
-            "signals": signals,
-            "model_state": model_state,
-            "series": series,
-        }
-
-    @staticmethod
-    def _round_trips_from_fills(fills: list[dict]) -> list[dict]:
-        """Pair replayed buys/sells into closed round trips for the window."""
-        round_trips: list[dict] = []
-        entry: dict | None = None
-        for fill in fills:
-            if fill["action"] == "buy" and entry is None:
-                entry = fill
-            elif fill["action"] == "sell" and entry is not None:
-                gross_return = fill["price"] / entry["price"] - 1
-                net_return = (
-                    fill["price"]
-                    * (1 - COMMISSION_RATE)
-                    / (entry["price"] * (1 + COMMISSION_RATE))
-                    - 1
-                )
-                round_trips.append(
-                    {
-                        "entry_signal_date": entry["date"],
-                        "entry_date": entry["date"],
-                        "entry_price": entry["price"],
-                        "exit_signal_date": fill["date"],
-                        "exit_date": fill["date"],
-                        "exit_price": fill["price"],
-                        "reason": "window replay",
-                        "gross_return": gross_return,
-                        "net_return": net_return,
-                    }
-                )
-                entry = None
-        return round_trips
-
-    @staticmethod
-    def _series_value_at(model: dict, key: str, as_of: date) -> float | None:
-        value = None
-        for day, item in zip(model.get("series_dates", []), model.get("series", {}).get(key, [])):
-            if day > as_of:
-                break
-            value = item
-        return value
 
     def get_signals(self, asset_id: int, strategy_key: str = DEFAULT_STRATEGY) -> dict:
         """Return strategy signals and model state for an asset."""
@@ -490,7 +321,14 @@ class GoldService(BaseService):
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> dict:
-        """Signals, model state and normalized NAV comparison for the page."""
+        """Signals, model state and normalized NAV comparison for the page.
+
+        With a date range the strategy is re-simulated strictly inside the
+        window: pre-window bars warm up the indicators while the account stays
+        flat, so the model is flat at the window start and can trade from the
+        first window bar (the intent pending at the last pre-window close
+        fills at that bar's open).
+        """
         asset = self.get_gold_asset(asset_id)
         if asset is None:
             raise ValueError(f"Gold asset {asset_id} not found")
@@ -498,12 +336,8 @@ class GoldService(BaseService):
             raise ValueError(f"Unknown gold strategy: {strategy_key}")
 
         bars = self.get_daily_bars(asset_id)
-        model = self.run_model(asset_id, strategy_key)
+        model = self.run_model(asset_id, strategy_key, start_date, end_date)
         initial_capital = self._get_initial_capital()
-        if start_date is not None or end_date is not None:
-            model = self._scope_model_to_window(
-                model, bars, initial_capital, start_date, end_date
-            )
 
         performance = self._build_performance(
             portfolio_id,

@@ -75,6 +75,42 @@ def gold_data(test_db):
     return asset, portfolio
 
 
+def _insert_bars(
+    test_db, asset, daily_changes: list[float], start_price: float = 400.0
+) -> list[date]:
+    """Insert weekday bars with the given close-to-close changes; return dates."""
+    day = date(2023, 1, 2)
+    price = start_price
+    days: list[date] = []
+    for change in daily_changes:
+        while day.weekday() >= 5:
+            day += timedelta(days=1)
+        price *= change
+        days.append(day)
+        test_db.add(
+            Price(
+                asset_id=asset.id,
+                price_date=day,
+                price=Decimal(str(round(price, 4))),
+                open=Decimal(str(round(price - 1, 4))),
+                high=Decimal(str(round(price + 2, 4))),
+                low=Decimal(str(round(price - 3, 4))),
+                volume=Decimal("1000"),
+                amount=Decimal("40"),
+                price_type="historical",
+                source="test",
+            )
+        )
+        day += timedelta(days=1)
+    test_db.commit()
+    return days
+
+
+def _insert_rising_bars(test_db, asset, count: int = 400) -> list[date]:
+    """Insert steadily rising weekday bars (open = close - 1) and return dates."""
+    return _insert_bars(test_db, asset, [1.002] * count)
+
+
 class TestGoldService:
     def test_user_position_average_cost_and_pnl(self, test_db, gold_data):
         asset, portfolio = gold_data
@@ -220,30 +256,7 @@ class TestGoldService:
         test_db.add(asset)
         test_db.commit()
         test_db.refresh(asset)
-
-        day = date(2023, 1, 2)
-        price = 400.0
-        inserted = 0
-        while inserted < 400:
-            if day.weekday() < 5:
-                price *= 1.002
-                test_db.add(
-                    Price(
-                        asset_id=asset.id,
-                        price_date=day,
-                        price=Decimal(str(round(price, 4))),
-                        open=Decimal(str(round(price - 1, 4))),
-                        high=Decimal(str(round(price + 2, 4))),
-                        low=Decimal(str(round(price - 3, 4))),
-                        volume=Decimal("1000"),
-                        amount=Decimal("40"),
-                        price_type="historical",
-                        source="test",
-                    )
-                )
-                inserted += 1
-            day += timedelta(days=1)
-        test_db.commit()
+        _insert_rising_bars(test_db, asset)
 
         test_db.add(
             Settings(key="gold_initial_capital", value="1000000", description="test")
@@ -319,6 +332,76 @@ class TestGoldService:
             )
         assert early["model_state"]["position_size"] == 0.0
         assert early["model_state"]["entry_price"] is None
+
+    def test_window_model_warms_up_and_starts_flat(self, test_db):
+        """Pre-window bars warm the indicators; the carried entry fills on day 1."""
+        cny = test_db._test_cny
+        asset = Asset(symbol="AU9999.SHG", name="Gold Spot", type="gold", currency_id=cny.id)
+        test_db.add(asset)
+        test_db.commit()
+        test_db.refresh(asset)
+        days = _insert_rising_bars(test_db, asset)
+
+        test_db.add(Settings(key="gold_initial_capital", value="10000", description="test"))
+        test_db.commit()
+
+        with GoldService(test_db) as service:
+            baseline = service.run_model(asset.id, "s1a_ma_cross_trailing")
+            windowed = service.get_overview(
+                test_db._test_portfolio.id,
+                asset.id,
+                "s1a_ma_cross_trailing",
+                start_date=days[200],
+                end_date=days[260],
+            )
+
+        # The full-history model is already long when the window starts, so the
+        # old replay semantics would have waited for its exit before entering.
+        baseline_buys = [fill for fill in baseline["fills"] if fill["action"] == "buy"]
+        assert baseline_buys
+        assert baseline_buys[0]["date"] < days[200]
+
+        # Warm-up is complete before the window, so the intent pending at the
+        # last pre-window close fills at the first window bar's open; tentative
+        # signals from earlier warm-up bars are retracted.
+        signals = windowed["signals"]
+        assert signals
+        pre_window = [signal for signal in signals if signal["signal_date"] < days[200]]
+        assert len(pre_window) == 1
+        assert pre_window[0]["action"] == "buy"
+        assert pre_window[0]["signal_date"] == days[199]
+        assert pre_window[0]["exec_date"] == days[200]
+        assert pre_window[0]["size"] > 0
+        assert windowed["model_state"]["position_size"] > 0
+        # Flat before the window start: NAV is rebased at the first window bar.
+        assert windowed["performance"]["model_nav"][0] == pytest.approx(100.0)
+
+    def test_window_model_does_not_carry_stale_warmup_signal(self, test_db):
+        """Only the intent from the last pre-window close carries into the window."""
+        cny = test_db._test_cny
+        asset = Asset(symbol="AU9999.SHG", name="Gold Spot", type="gold", currency_id=cny.id)
+        test_db.add(asset)
+        test_db.commit()
+        test_db.refresh(asset)
+        # Trend up for 160 bars, then a steady decline: the buy condition was
+        # true during warm-up but is already broken before the window starts.
+        days = _insert_bars(test_db, asset, [1.002] * 160 + [0.995] * 240)
+
+        test_db.add(Settings(key="gold_initial_capital", value="10000", description="test"))
+        test_db.commit()
+
+        with GoldService(test_db) as service:
+            windowed = service.get_overview(
+                test_db._test_portfolio.id,
+                asset.id,
+                "s1a_ma_cross_trailing",
+                start_date=days[200],
+                end_date=days[260],
+            )
+
+        # No stale intent is carried; the decline keeps the account flat.
+        assert windowed["signals"] == []
+        assert windowed["model_state"]["position_size"] == 0.0
 
     def test_get_signals_on_short_history(self, test_db, gold_data):
         asset, _ = gold_data

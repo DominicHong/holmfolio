@@ -34,6 +34,11 @@ class EquityCurve(bt.Analyzer):
         self.values: list[float] = []
         self.fund_values: list[float] = []
 
+    def prenext(self):
+        # Indicator warm-up bars: the account is flat, but a window run still
+        # needs NAV from its first bar even before the indicators are ready.
+        self.next()
+
     def next(self):
         self.dates.append(self.strategy.data.datetime.date(0))
         self.values.append(self.strategy.broker.getvalue())
@@ -71,6 +76,7 @@ def run_gold_backtest(
     strategy_cls: type[LongOnlyStrategyBase],
     strategy_params: dict | None = None,
     initial_cash: float = INITIAL_CASH,
+    trade_start_date: date | None = None,
 ) -> dict:
     """Run one strategy over daily bars and return signals, NAV and state.
 
@@ -80,12 +86,18 @@ def run_gold_backtest(
         strategy_cls: strategy class deriving from LongOnlyStrategyBase.
         strategy_params: optional parameter overrides.
         initial_cash: nominal account size used for position sizing.
+        trade_start_date: when given, earlier bars only warm up the
+            indicators; the account stays flat until this date, and the entry
+            pending at the last earlier bar fills at the first bar on/after it.
 
     Returns:
         dict with keys: nav_dates, nav_values, signals, fills, round_trips,
         model_state, series_dates, series.
     """
-    cerebro = make_cerebro(data, strategy_cls, strategy_params, initial_cash)
+    params = dict(strategy_params or {})
+    if trade_start_date is not None:
+        params["trade_start_date"] = trade_start_date
+    cerebro = make_cerebro(data, strategy_cls, params, initial_cash)
     # runonce=False keeps short/incomplete histories safe: the vectorized path
     # indexes past the end when data is shorter than the indicator warm-up.
     # Long histories use the fast vectorized path.

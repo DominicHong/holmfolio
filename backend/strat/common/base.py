@@ -9,7 +9,10 @@ Shared behaviour:
 - long only: exits always ``close()``, never reverse to short;
 - signals confirmed at close, filled at next open (backtrader market order);
 - position sizing (fixed grams / available-cash percentage / risk budget);
-- order state management and position-lifecycle bookkeeping.
+- order state management and position-lifecycle bookkeeping;
+- optional ``trade_start_date``: earlier bars only warm up the indicators and
+  their entry intents are tentative, so the account is flat at the window
+  start and the intent pending there fills at the first window bar's open.
 """
 
 from datetime import date
@@ -34,6 +37,8 @@ class LongOnlyStrategyBase(bt.Strategy):
         ("position_percent", POSITION_PERCENT),
         ("risk_per_trade", RISK_PER_TRADE),
         ("verbose", False),
+        # Bars before this date only warm up the indicators (window runs).
+        ("trade_start_date", None),
     )
 
     def __init__(self):
@@ -115,6 +120,16 @@ class LongOnlyStrategyBase(bt.Strategy):
     def has_pending_order(self) -> bool:
         return self.order is not None
 
+    def _trading_enabled(self) -> bool:
+        """False on the warm-up bars before ``trade_start_date``.
+
+        Window simulations feed pre-window bars so the indicators are fully
+        warmed at the window start while the account stays flat: sizes and
+        orders are only funded from the first bar on/after that date.
+        """
+        start = self.p.trade_start_date
+        return start is None or self.data.datetime.date(0) >= start
+
     # ---------- order placement ----------
     def buy_next_open(self, reason: str = ""):
         """Register an entry intent; sized and submitted at next bar open."""
@@ -130,6 +145,14 @@ class LongOnlyStrategyBase(bt.Strategy):
             return
         self._pending_entry = False
         if self.position or self.has_pending_order:
+            return
+        if not self._trading_enabled():
+            # Warm-up bar: retract the tentative signal from the previous
+            # close. The entry condition is re-evaluated every close, so only
+            # the intent pending at the window start reaches the first
+            # tradable bar and fills there.
+            if self.signals and self.signals[-1]["signal_date"] == self.data.datetime.date(-1):
+                self.signals.pop()
             return
         size = self.calc_size(float(self.data.open[0]))
         if size <= 0:

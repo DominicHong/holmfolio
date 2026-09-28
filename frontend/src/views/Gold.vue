@@ -382,13 +382,17 @@ const metricRows = computed<MetricRow[]>(() => {
     })
 })
 
+function signalInRange(signal: GoldSignal, range: [string, string] | null): boolean {
+  if (!range) return true
+  const inWindowSignal = signal.signal_date >= range[0] && signal.signal_date <= range[1]
+  const inWindowExec =
+    signal.exec_date != null && signal.exec_date >= range[0] && signal.exec_date <= range[1]
+  return inWindowSignal || inWindowExec
+}
+
 const signalRows = computed(() => {
   const range = dateRange.value
-  const list = range
-    ? signals.value.filter(
-        (signal) => signal.signal_date >= range[0] && signal.signal_date <= range[1]
-      )
-    : signals.value
+  const list = signals.value.filter((signal) => signalInRange(signal, range))
   return [...list].slice().reverse()
 })
 
@@ -445,9 +449,7 @@ const chartSeries = computed(() => {
   for (const [key, values] of Object.entries(data.series)) {
     series[key] = indices.map((index) => values[index] ?? null)
   }
-  const signalList = range
-    ? data.signals.filter((signal) => signal.signal_date >= range[0] && signal.signal_date <= range[1])
-    : data.signals
+  const signalList = data.signals.filter((signal) => signalInRange(signal, range))
   return { dates, series, signals: signalList }
 })
 
