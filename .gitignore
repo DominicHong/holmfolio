@@ -97,5 +97,3 @@ backend/ai/ifind-finance-data/mcp_config.json
 logs/
 tests/output/
 tests/xueqiu_portfolio.csv
-data/518880.SH.csv
-data/AU9999_Daily.csv

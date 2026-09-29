@@ -247,7 +247,7 @@ const transactionStore = useTransactionStore()
 
 const strategyOptions = [
   { value: 's1a_ma_cross_trailing', label: 's1a Dual-MA trend + ATR trailing stop (default)' },
-  { value: 's3_bollinger_squeeze', label: 's3 Bollinger squeeze breakout' }
+  { value: 's1b_vol_target_ma_cross', label: 's1b Dual-MA trend + vol-target position sizing' }
 ]
 
 const selectedAssetId = ref<number | null>(null)
@@ -573,7 +573,14 @@ async function handleTransactionAction(actionName: string, row: Record<string, a
   }
 }
 
+// Guards against the initial asset selection made during onMounted, which
+// would otherwise trigger the watcher and fire a second, identical
+// /gold/overview request alongside the explicit load at the end of
+// initialization.
+let initializing = true
+
 watch([selectedAssetId, selectedStrategy, dateRange], () => {
+  if (initializing) return
   loadOverview()
 })
 
@@ -591,6 +598,8 @@ onMounted(async () => {
     await loadOverview()
   } catch (error) {
     handleApiError(error, 'Failed to initialize gold page')
+  } finally {
+    initializing = false
   }
 })
 </script>

@@ -1,11 +1,11 @@
 """Parity tests for the ported gold strategies against holmes-lab backtests.
 
-Reference results (holmes-lab strategies/au9999_cta/results, window
+Reference results (holmes-lab strategies/au9999_cta, window
 2018-01-01 ~ 2026-09-01, one-way commission 0.02% + slippage 0.02%):
 - 518880 s1a: 53 closed trades, first 2018-10-22 -> 2018-11-01, final 3.3494x
 - AU9999 s1a: 34 closed trades, first 2018-10-19 -> 2018-11-13, final 3.7268x
-- s3: 5 closed trades on both assets (2020-07-23 first round trip), plus an
-  open position entered 2026-08-07 with a pending sell signal on 2026-09-01.
+- 518880 s1b: 53 closed trades, first 2018-10-22 -> 2018-11-01, final 3.0545x
+- AU9999 s1b: 34 closed trades, first 2018-10-19 -> 2018-11-13, final 3.4653x
 """
 
 from datetime import date
@@ -49,58 +49,64 @@ def test_s1a_au9999_round_trips_match_reference():
     assert result["nav_values"][-1] == pytest.approx(372.684, rel=1e-4)
 
 
-@pytest.mark.parametrize(
-    ("csv_path", "exit_dates"),
-    [
-        (
-            "data/518880.SH.csv",
-            [
-                date(2020, 8, 13),
-                date(2022, 12, 6),
-                date(2023, 4, 24),
-                date(2024, 4, 24),
-                date(2025, 10, 29),
-            ],
-        ),
-        (
-            "data/AU9999_Daily.csv",
-            [
-                date(2020, 8, 13),
-                date(2022, 12, 7),
-                date(2023, 4, 25),
-                date(2024, 4, 24),
-                date(2025, 10, 29),
-            ],
-        ),
-    ],
-)
-def test_s3_closed_round_trips_match_reference(csv_path, exit_dates):
-    result = _run(csv_path, "s3_bollinger_squeeze")
+def test_s1b_518880_round_trips_match_reference():
+    result = _run("data/518880.SH.csv", "s1b_vol_target_ma_cross")
     trips = result["round_trips"]
 
-    assert len(trips) == 5
-    assert [trip["exit_date"] for trip in trips] == exit_dates
-    assert trips[0]["entry_date"] == date(2020, 7, 23)
+    assert len(trips) == 53
+    assert trips[0]["entry_date"] == date(2018, 10, 22)
+    assert trips[0]["exit_date"] == date(2018, 11, 1)
+    assert result["nav_values"][-1] == pytest.approx(305.455, rel=1e-4)
 
 
-def test_s3_pending_sell_signal_and_open_position():
-    result = _run("data/518880.SH.csv", "s3_bollinger_squeeze")
-    state = result["model_state"]
+def test_s1b_au9999_round_trips_match_reference():
+    result = _run("data/AU9999_Daily.csv", "s1b_vol_target_ma_cross")
+    trips = result["round_trips"]
 
-    assert state["position_size"] > 0
-    assert state["entry_date"] == date(2026, 8, 7)
-    assert state["stop_price"] is not None
-    assert state["pending_signal"]["signal_date"] == date(2026, 9, 1)
-    assert state["pending_signal"]["action"] == "sell"
+    assert len(trips) == 34
+    assert trips[0]["entry_date"] == date(2018, 10, 19)
+    assert trips[0]["exit_date"] == date(2018, 11, 13)
+    assert result["nav_values"][-1] == pytest.approx(346.530, rel=1e-4)
+
+
+@pytest.mark.parametrize("csv_path", ["data/518880.SH.csv", "data/AU9999_Daily.csv"])
+def test_s1b_vol_target_scales_position(csv_path):
+    result = _run(csv_path, "s1b_vol_target_ma_cross")
+    position_pct = result["series"]["position_pct"]
+    positive_pct = [value for value in position_pct if value > 0]
+
+    # Target factors stay on the {25%, 50%, 75%, 100%} grid and high-volatility
+    # periods actually de-risk (the smallest positive position is ~25%).
+    assert set(result["series"]["factor"]) <= {0.25, 0.5, 0.75, 1.0}
+    assert max(position_pct) > 90.0
+    assert min(positive_pct) < 60.0
+
+
+@pytest.mark.parametrize("csv_path", ["data/518880.SH.csv", "data/AU9999_Daily.csv"])
+def test_s1b_rebalances_do_not_count_as_round_trips(csv_path):
+    """Grid rebalances are fills only; only signal exits close round trips."""
+    result = _run(csv_path, "s1b_vol_target_ma_cross")
+    partial_sells = [
+        fill
+        for fill in result["fills"]
+        if fill["action"] == "sell" and fill["position"] > 0
+    ]
+    sell_signals = [signal for signal in result["signals"] if signal["action"] == "sell"]
+
+    assert partial_sells
+    assert len(sell_signals) == len(result["round_trips"])
+    assert all(signal["size"] is not None for signal in sell_signals)
 
 
 def test_engine_reports_close_only_round_trips():
-    result = _run("data/518880.SH.csv", "s3_bollinger_squeeze")
+    result = _run("data/518880.SH.csv", "s1b_vol_target_ma_cross")
 
     assert all(trip["exit_date"] is not None for trip in result["round_trips"])
 
 
-@pytest.mark.parametrize("strategy_key", ["s1a_ma_cross_trailing", "s3_bollinger_squeeze"])
+@pytest.mark.parametrize(
+    "strategy_key", ["s1a_ma_cross_trailing", "s1b_vol_target_ma_cross"]
+)
 def test_engine_records_model_position_percentage(strategy_key):
     result = _run("data/518880.SH.csv", strategy_key)
     position_pct = result["series"]["position_pct"]

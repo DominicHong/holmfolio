@@ -333,7 +333,10 @@ class TestGoldService:
         assert early["model_state"]["position_size"] == 0.0
         assert early["model_state"]["entry_price"] is None
 
-    def test_window_model_warms_up_and_starts_flat(self, test_db):
+    @pytest.mark.parametrize(
+        "strategy_key", ["s1a_ma_cross_trailing", "s1b_vol_target_ma_cross"]
+    )
+    def test_window_model_warms_up_and_starts_flat(self, test_db, strategy_key):
         """Pre-window bars warm the indicators; the carried entry fills on day 1."""
         cny = test_db._test_cny
         asset = Asset(symbol="AU9999.SHG", name="Gold Spot", type="gold", currency_id=cny.id)
@@ -346,11 +349,11 @@ class TestGoldService:
         test_db.commit()
 
         with GoldService(test_db) as service:
-            baseline = service.run_model(asset.id, "s1a_ma_cross_trailing")
+            baseline = service.run_model(asset.id, strategy_key)
             windowed = service.get_overview(
                 test_db._test_portfolio.id,
                 asset.id,
-                "s1a_ma_cross_trailing",
+                strategy_key,
                 start_date=days[200],
                 end_date=days[260],
             )
@@ -407,9 +410,9 @@ class TestGoldService:
         asset, _ = gold_data
 
         with GoldService(test_db) as service:
-            signals = service.get_signals(asset.id, "s3_bollinger_squeeze")
+            signals = service.get_signals(asset.id, "s1b_vol_target_ma_cross")
 
-        assert signals["strategy"] == "s3_bollinger_squeeze"
+        assert signals["strategy"] == "s1b_vol_target_ma_cross"
         assert signals["signals"] == []
         assert signals["model_state"]["position_size"] == 0.0
 

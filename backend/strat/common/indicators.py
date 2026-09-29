@@ -5,6 +5,30 @@ import math
 import backtrader as bt
 import numpy as np
 
+from backend.strat.common.constants import TRADING_DAYS_PER_YEAR
+
+
+class RealizedVolatility(bt.Indicator):
+    """Annualized realized volatility: sample std of daily returns x sqrt(252).
+
+    Matches the documented RV60 convention (ddof=1); the first return is
+    undefined, so the first ``period + 1`` bars have no value.
+    """
+
+    lines = ("rv",)
+    params = (
+        ("period", 60),
+        ("annualize", float(TRADING_DAYS_PER_YEAR)),
+    )
+
+    def __init__(self):
+        self.addminperiod(self.p.period + 1)
+
+    def next(self):
+        closes = np.asarray(self.data.get(size=self.p.period + 1), dtype=float)
+        returns = np.diff(closes) / closes[:-1]
+        self.lines.rv[0] = float(np.std(returns, ddof=1) * math.sqrt(self.p.annualize))
+
 
 class OnBalanceVolume(bt.Indicator):
     """On-balance volume: add volume on up days, subtract on down days."""

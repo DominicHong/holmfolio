@@ -42,7 +42,7 @@ HolmFolio is an evidence-based investing personal asset management system built 
 - **Asset Allocation**: Visual breakdown by asset type and custom tag categories
 - **Benchmark Comparison**: Compare portfolio performance against market indices, including composite benchmarks
 - **Financial Analysis**: Dividend, net income, and equity data tracking via THS, including HK red chip / A+H dual-listing tax adjustment
-- **Gold Trading Module**: Daily CTA strategies over gold spot AU9999.SHG / gold ETF 518880.SH (s1a dual-MA + ATR trailing stop, s3 Bollinger squeeze), with strategy signals from real daily bars, real fills recorded as standard transactions, and normalized NAV comparison of user account vs strategy model vs the selected asset's buy-and-hold. Within a selected date range the indicators are warmed with all pre-window bars while the account stays flat, then the strategy trades from the range start at the configured gold initial capital (an entry pending at the last pre-window close fills at the first range day's open), so every displayed fill/signal unit is an actual held quantity (window-filtered trade metrics).
+- **Gold Trading Module**: Daily CTA strategies over gold spot AU9999.SHG / gold ETF 518880.SH (s1a dual-MA + ATR trailing stop, s1b dual-MA + vol-target position sizing), with strategy signals from real daily bars, real fills recorded as standard transactions, and normalized NAV comparison of user account vs strategy model vs the selected asset's buy-and-hold. Within a selected date range the indicators are warmed with all pre-window bars while the account stays flat, then the strategy trades from the range start at the configured gold initial capital (an entry pending at the last pre-window close fills at the first range day's open), so every displayed fill/signal unit is an actual held quantity (window-filtered trade metrics).
 - **Multi-asset Support**: Stocks, bonds, funds, ETFs, cash, gold. See [Adding New Asset Types](#adding-new-asset-types) for more details.
 
 ### Technical Features
@@ -102,7 +102,7 @@ holmfolio/
 │   │   └── tag.py
 │   ├── strat/                     # Strategy package (holmes-lab layout)
 │   │   ├── common/                # base, constants, engine, data_loader
-│   │   └── gold/                  # s1a MaCrossTrailingStop, s3 BollingerSqueeze
+│   │   └── gold/                  # s1a MaCrossTrailingStop, s1b VolTargetMaCross
 │   ├── data_source.py             # AKShare + THS + iFinD HTTP data sources
 │   ├── init_data.py               # Database initialization
 │   ├── main.py                    # FastAPI app + lifespan backfill
@@ -315,7 +315,7 @@ Use the provided startup scripts to launch both servers:
 ### Gold Trading (`/gold`)
 
 - Two gold instruments: AU9999.SHG (SGE spot) and 518880.SH (Huaan Gold ETF), both regular assets that count in portfolio statistics
-- Two daily long-only CTA strategies: `s1a_ma_cross_trailing` (SMA30/90 + ATR(14) 2.5x trailing stop, default) and `s3_bollinger_squeeze` (BB20/2.0 + 200-day 10% squeeze + ATR stop)
+- Two daily long-only CTA strategies: `s1a_ma_cross_trailing` (SMA30/90 + ATR(14) 2.5x trailing stop, default) and `s1b_vol_target_ma_cross` (same timing rules plus an RV60 vol target: f = min(1, 15% / RV60) gridded to 25/50/75/100%, with grid-change rebalancing while long)
 - Signals are confirmed on close and expected to fill at the next open; the model position, entry price and stop price are always shown
 - Signal list for the selected date range (pending signals included), plus a price chart with buy/sell markers, stop overlay and a strategy position (% of equity) bar chart underneath
 - Record real fills directly on the page (stored as standard transactions, so they flow into positions and all other modules)

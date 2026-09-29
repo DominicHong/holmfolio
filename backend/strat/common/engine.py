@@ -22,7 +22,7 @@ from backend.strat.common.constants import (
 
 
 # Any dataset at least this long is safe for the vectorized (runonce) path:
-# the deepest warm-up in the gold strategies is the 200-bar squeeze lookback.
+# the deepest warm-up in the gold strategies is SMA90/RV60, well under this.
 MIN_VECTORIZED_BARS = 320
 
 
