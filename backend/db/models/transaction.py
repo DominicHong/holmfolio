@@ -20,6 +20,9 @@ class Transaction(SQLModel, table=True):
     fees: Decimal | None = Field(default=0)
     currency_id: int = Field(foreign_key="currency.id")
     notes: str | None = None
+    # Gold strategy group key (e.g. s1a_ma_cross_trailing); NULL for non-gold
+    # transactions. Gold trades are grouped per (asset, strategy) on the Gold page.
+    strategy: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
     # Relationships

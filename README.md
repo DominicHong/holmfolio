@@ -42,7 +42,7 @@ HolmFolio is an evidence-based investing personal asset management system built 
 - **Asset Allocation**: Visual breakdown by asset type and custom tag categories
 - **Benchmark Comparison**: Compare portfolio performance against market indices, including composite benchmarks
 - **Financial Analysis**: Dividend, net income, and equity data tracking via THS, including HK red chip / A+H dual-listing tax adjustment
-- **Gold Trading Module**: Daily CTA strategies over gold spot AU9999.SHG / gold ETF 518880.SH (s1a dual-MA + ATR trailing stop, s1b dual-MA + vol-target position sizing), with strategy signals from real daily bars, real fills recorded as standard transactions, and normalized NAV comparison of user account vs strategy model vs the selected asset's buy-and-hold. Within a selected date range the indicators are warmed with all pre-window bars while the account stays flat, then the strategy trades from the range start at the configured gold initial capital (an entry pending at the last pre-window close fills at the first range day's open), so every displayed fill/signal unit is an actual held quantity (window-filtered trade metrics).
+- **Gold Trading Module**: Daily CTA strategies over gold spot AU9999.SHG / gold ETF 518880.SH (s1a dual-MA + ATR trailing stop, s1b dual-MA + vol-target position sizing), with strategy signals from real daily bars, real fills recorded as standard transactions grouped per (asset, strategy), and normalized NAV comparison of user account vs strategy model vs the selected asset's buy-and-hold. Within a selected date range the indicators are warmed with all pre-window bars while the account stays flat, then the strategy trades from the range start at the configured gold initial capital (an entry pending at the last pre-window close fills at the first range day's open), so every displayed fill/signal unit is an actual held quantity (window-filtered trade metrics).
 - **Multi-asset Support**: Stocks, bonds, funds, ETFs, cash, gold. See [Adding New Asset Types](#adding-new-asset-types) for more details.
 
 ### Technical Features
@@ -318,7 +318,8 @@ Use the provided startup scripts to launch both servers:
 - Two daily long-only CTA strategies: `s1a_ma_cross_trailing` (SMA30/90 + ATR(14) 2.5x trailing stop, default) and `s1b_vol_target_ma_cross` (same timing rules plus an RV60 vol target: f = min(1, 15% / RV60) gridded to 25/50/75/100%, with grid-change rebalancing while long)
 - Signals are confirmed on close and expected to fill at the next open; the model position, entry price and stop price are always shown
 - Signal list for the selected date range (pending signals included), plus a price chart with buy/sell markers, stop overlay and a strategy position (% of equity) bar chart underneath
-- Record real fills directly on the page (stored as standard transactions, so they flow into positions and all other modules)
+- Record real fills directly on the page (stored as standard transactions with a `strategy` tag, so they flow into positions and all other modules)
+- Gold trades are grouped per (asset, strategy): each of the assets ×  strategies has its own "Your Gold Trades" list, position, P&L and user NAV curve, and "Record Trade" always writes to the group currently selected on the page. All groups live in the same portfolio, so portfolio-level positions aggregate every group.
 - Normalized NAV comparison (start = 100) of the user's gold account, the strategy model and the selected asset's buy-and-hold (AU9999.SHG spot when AU9999.SHG is selected), with return/drawdown/Sharpe/win-rate metrics computed for the selected date range. Inside a date range the indicators are warmed with every pre-window bar while the account stays flat, then the strategy runs from the range start with a fresh account at the configured initial capital (Settings → Gold Initial Capital), sized against the available cash; the entry pending at the last pre-window close fills at the first range day's open, and positions are reported as of the window end date.
 
 ### Analytics (`/analytics`)
@@ -385,7 +386,7 @@ SQLite database at `backend/portfolio.db`.
 | **TagCategory**         | Tag classification categories (行业, 地域, 资产类型, 风格)                    |
 | **Tag**                 | Tag definitions (unique on name + category)                              |
 | **AssetTag**            | Many-to-many asset↔tag with weights (unique on asset_id + tag_id)         |
-| **Transaction**         | All portfolio transactions (buy/sell/cash_in/cash_out/dividends/split/interest/tax) |
+| **Transaction**         | All portfolio transactions (buy/sell/cash_in/cash_out/dividends/split/interest/tax); optional `strategy` groups gold trades per (asset, strategy) |
 | **Price**               | Historical price data (unique on asset_id + price_date); gold bars also carry optional OHLCV/amount |
 | **StockInfo**           | Cached THS financial data (dividends, net income, equity, total shares)   |
 | **Portfolio**           | Portfolio definitions                                                     |

@@ -19,6 +19,7 @@ class TransactionResponse(BaseModel):
     fees: float | None
     currency_id: int
     notes: str | None
+    strategy: str | None = None
     created_at: datetime
     currency: CurrencyResponse | None
 

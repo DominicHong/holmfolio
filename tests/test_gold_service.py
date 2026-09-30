@@ -9,6 +9,7 @@ from sqlmodel import select
 
 from backend.db.models import Asset, Price, Settings, Transaction
 from backend.services import GoldService, PriceRateService
+from backend.strat.gold import DEFAULT_STRATEGY
 
 
 @pytest.fixture
@@ -57,6 +58,7 @@ def gold_data(test_db):
                 amount=Decimal("48000"),
                 fees=Decimal("10"),
                 currency_id=cny.id,
+                strategy=DEFAULT_STRATEGY,
             ),
             Transaction(
                 portfolio_id=portfolio.id,
@@ -68,6 +70,7 @@ def gold_data(test_db):
                 amount=Decimal("20000"),
                 fees=Decimal("5"),
                 currency_id=cny.id,
+                strategy=DEFAULT_STRATEGY,
             ),
         ]
     )
@@ -126,6 +129,41 @@ class TestGoldService:
         assert position["sells"] == 1
         assert position["win_rate"] == pytest.approx(1.0)
 
+    def test_user_position_isolated_per_strategy(self, test_db, gold_data):
+        """The same asset traded under two strategies forms two independent groups."""
+        asset, portfolio = gold_data
+        cny = test_db._test_cny
+        test_db.add(
+            Transaction(
+                portfolio_id=portfolio.id,
+                asset_id=asset.id,
+                trade_date=date(2024, 1, 4),
+                action="buy",
+                quantity=Decimal("10"),
+                price=Decimal("500"),
+                amount=Decimal("5000"),
+                fees=Decimal("0"),
+                currency_id=cny.id,
+                strategy="s1b_vol_target_ma_cross",
+            )
+        )
+        test_db.commit()
+
+        with GoldService(test_db) as service:
+            s1a = service.get_user_position(portfolio.id, asset.id, DEFAULT_STRATEGY)
+            s1b = service.get_user_position(
+                portfolio.id, asset.id, "s1b_vol_target_ma_cross"
+            )
+            combined = service.get_user_position(portfolio.id, asset.id)
+
+        assert s1a["quantity"] == pytest.approx(60.0)
+        assert s1a["sells"] == 1
+        assert s1b["quantity"] == pytest.approx(10.0)
+        assert s1b["average_cost"] == pytest.approx(500.0)
+        assert s1b["sells"] == 0
+        # Without a strategy filter the whole asset position aggregates every group.
+        assert combined["quantity"] == pytest.approx(70.0)
+
     def test_overview_normalized_nav_curves(self, test_db, gold_data):
         asset, portfolio = gold_data
         test_db.add(
@@ -180,6 +218,55 @@ class TestGoldService:
         assert user_metrics["trades"] == 0
         assert user_metrics["win_rate"] is None
         assert user_metrics["realized_pnl"] == pytest.approx(0.0)
+
+    def test_overview_user_metrics_scoped_to_strategy(self, test_db, gold_data):
+        """User NAV and metrics only count the selected (asset, strategy) group."""
+        asset, portfolio = gold_data
+        cny = test_db._test_cny
+        test_db.add(
+            Settings(key="gold_initial_capital", value="1000000", description="test")
+        )
+        test_db.add(
+            Transaction(
+                portfolio_id=portfolio.id,
+                asset_id=asset.id,
+                trade_date=date(2024, 1, 3),
+                action="buy",
+                quantity=Decimal("10"),
+                price=Decimal("500"),
+                amount=Decimal("5000"),
+                fees=Decimal("0"),
+                currency_id=cny.id,
+                strategy="s1b_vol_target_ma_cross",
+            )
+        )
+        test_db.commit()
+
+        params = {"start_date": date(2024, 1, 2), "end_date": date(2024, 1, 5)}
+        with GoldService(test_db) as service:
+            s1b = service.get_overview(
+                portfolio.id, asset.id, "s1b_vol_target_ma_cross", **params
+            )
+            s1a = service.get_overview(
+                portfolio.id, asset.id, DEFAULT_STRATEGY, **params
+            )
+
+        # The s1b group only knows its own buy.
+        assert s1b["user_position"]["quantity"] == pytest.approx(10.0)
+        assert s1b["user_position"]["sells"] == 0
+        # 1,000,000 cash minus the 5,000 spent, marked at each close.
+        assert s1b["performance"]["user_nav"] == pytest.approx(
+            [100.0, 99.985, 100.0, 99.99]
+        )
+        assert s1b["performance"]["metrics"]["user"]["trades"] == 0
+        assert s1b["performance"]["metrics"]["user"]["realized_pnl"] == pytest.approx(0.0)
+
+        # The s1a group still reports its own buy/sell pair.
+        assert s1a["user_position"]["quantity"] == pytest.approx(60.0)
+        assert s1a["performance"]["metrics"]["user"]["trades"] == 1
+        assert s1a["performance"]["metrics"]["user"]["realized_pnl"] == pytest.approx(
+            791.0
+        )
 
     def test_sharpe_uses_settings_risk_free_rate(self, test_db, gold_data):
         asset, portfolio = gold_data

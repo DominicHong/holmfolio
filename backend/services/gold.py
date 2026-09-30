@@ -215,16 +215,19 @@ class GoldService(BaseService):
         self,
         portfolio_id: int,
         asset_id: int,
+        strategy_key: str | None = None,
         end_date: date | None = None,
     ) -> dict:
         """Replay gold transactions into a position/P&L summary (average cost).
 
-        When ``end_date`` is given, only transactions on/before that date are
-        replayed so the reported units are the position held on that date.
+        When ``strategy_key`` is given, only transactions of that
+        (asset, strategy) trade group are replayed. When ``end_date`` is given,
+        only transactions on/before that date are replayed so the reported
+        units are the position held on that date.
         """
         transactions = [
             txn
-            for txn in self._get_gold_transactions(portfolio_id, asset_id)
+            for txn in self._get_gold_transactions(portfolio_id, asset_id, strategy_key)
             if end_date is None or txn.trade_date <= end_date
         ]
         quantity = 0.0
@@ -279,15 +282,19 @@ class GoldService(BaseService):
             "transactions": len(transactions),
         }
 
-    def _get_gold_transactions(self, portfolio_id: int, asset_id: int) -> list[Transaction]:
-        return self.session.exec(
-            select(Transaction)
-            .where(
-                Transaction.portfolio_id == portfolio_id,
-                Transaction.asset_id == asset_id,
-            )
-            .order_by(Transaction.trade_date)
-        ).all()
+    def _get_gold_transactions(
+        self,
+        portfolio_id: int,
+        asset_id: int,
+        strategy_key: str | None = None,
+    ) -> list[Transaction]:
+        statement = select(Transaction).where(
+            Transaction.portfolio_id == portfolio_id,
+            Transaction.asset_id == asset_id,
+        )
+        if strategy_key is not None:
+            statement = statement.where(Transaction.strategy == strategy_key)
+        return self.session.exec(statement.order_by(Transaction.trade_date)).all()
 
     def _get_initial_capital(self) -> float:
         setting = self.session.exec(
@@ -347,6 +354,7 @@ class GoldService(BaseService):
             start_date,
             end_date,
             self._get_risk_free_rate(),
+            strategy_key,
         )
 
         return {
@@ -358,7 +366,9 @@ class GoldService(BaseService):
             "series_dates": model["series_dates"],
             "series": model["series"],
             "performance": performance,
-            "user_position": self.get_user_position(portfolio_id, asset_id, end_date),
+            "user_position": self.get_user_position(
+                portfolio_id, asset_id, strategy_key, end_date
+            ),
             "initial_capital": initial_capital,
         }
 
@@ -371,6 +381,7 @@ class GoldService(BaseService):
         start_date: date | None,
         end_date: date | None,
         risk_free_rate: float,
+        strategy_key: str | None = None,
     ) -> dict:
         model_map = dict(zip(model["nav_dates"], model["nav_values"]))
         dates = sorted(model_map)
@@ -397,11 +408,16 @@ class GoldService(BaseService):
 
         initial_capital = self._get_initial_capital()
         user_nav = self._user_nav_series(
-            portfolio_id, asset.id, dates, asset_aligned, initial_capital
+            portfolio_id,
+            asset.id,
+            dates,
+            asset_aligned,
+            initial_capital,
+            strategy_key,
         )
 
         user_trade_stats = self._user_trade_stats(
-            portfolio_id, asset.id, start_date, end_date
+            portfolio_id, asset.id, start_date, end_date, strategy_key
         )
         window_round_trips = [
             trip
@@ -449,14 +465,18 @@ class GoldService(BaseService):
         asset_id: int,
         start_date: date | None,
         end_date: date | None,
+        strategy_key: str | None = None,
     ) -> dict:
         """Sell-count / win-rate / realized P&L for sells inside the window.
 
-        The full transaction history is replayed so that the average cost at
-        each sell is correct, but only sells within [start_date, end_date] are
-        counted, keeping the metrics consistent with the displayed NAV window.
+        Only the (asset, strategy) trade group is replayed; the full group
+        history keeps the average cost at each sell correct, but only sells
+        within [start_date, end_date] are counted, keeping the metrics
+        consistent with the displayed NAV window.
         """
-        transactions = self._get_gold_transactions(portfolio_id, asset_id)
+        transactions = self._get_gold_transactions(
+            portfolio_id, asset_id, strategy_key
+        )
         quantity = 0.0
         average_cost = 0.0
         sells = 0
@@ -503,8 +523,11 @@ class GoldService(BaseService):
         dates: list[date],
         asset_close: np.ndarray,
         initial_capital: float,
+        strategy_key: str | None = None,
     ) -> list[float]:
-        transactions = self._get_gold_transactions(portfolio_id, asset_id)
+        transactions = self._get_gold_transactions(
+            portfolio_id, asset_id, strategy_key
+        )
         by_date: dict[date, list[Transaction]] = {}
         for txn in transactions:
             by_date.setdefault(txn.trade_date, []).append(txn)

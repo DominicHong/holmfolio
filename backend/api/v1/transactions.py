@@ -78,6 +78,7 @@ def get_transactions(portfolio_id: int, session: Session = Depends(get_session))
             fees=float(transaction.fees) if transaction.fees else None,
             currency_id=transaction.currency_id,
             notes=transaction.notes,
+            strategy=transaction.strategy,
             created_at=transaction.created_at,
             currency=currency_data
         )

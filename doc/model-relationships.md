@@ -85,6 +85,7 @@ erDiagram
         decimal amount
         decimal fees
         str notes
+        str strategy "nullable; groups gold trades per asset+strategy"
     }
 
     PRICE {

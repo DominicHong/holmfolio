@@ -65,6 +65,7 @@ export interface Transaction {
   currency_id: number
   currency?: Currency
   notes?: string
+  strategy?: string | null
   created_at?: string
   updated_at?: string
 }

@@ -177,7 +177,10 @@
     <el-card class="table-card">
       <template #header>
         <div class="chart-header">
-          <span class="chart-title">Your Gold Trades</span>
+          <div class="chart-header-left">
+            <span class="chart-title">Your Gold Trades</span>
+            <span class="chart-subtitle">{{ currentAssetSymbol }} · {{ strategyLabel }}</span>
+          </div>
           <el-button type="primary" size="small" :icon="Plus" @click="openFillDialog()">Record Trade</el-button>
         </div>
       </template>
@@ -186,13 +189,22 @@
         :data="userTransactions"
         :columns="transactionColumns"
         :loading="loading"
-        empty-text="No gold transactions recorded yet"
+        empty-text="No trades recorded for this asset and strategy yet"
         @action="handleTransactionAction"
       />
     </el-card>
 
     <el-dialog v-model="showFillDialog" title="Record Gold Trade" width="520px">
       <el-form :model="fillForm" label-width="110px">
+        <el-form-item label="Asset">
+          <el-input
+            :model-value="overview?.asset ? `${overview.asset.symbol} - ${overview.asset.name}` : ''"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item label="Strategy">
+          <el-input :model-value="strategyLabel" disabled />
+        </el-form-item>
         <el-form-item label="Date">
           <el-date-picker v-model="fillForm.trade_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
@@ -422,9 +434,13 @@ const transactionColumns = computed(() => [
   }
 ])
 
+// Gold trades are grouped per (asset, strategy); show only the group that
+// matches the page selectors.
 const userTransactions = computed(() =>
   transactionStore.transactions.filter(
-    (transaction) => transaction.asset_id === selectedAssetId.value
+    (transaction) =>
+      transaction.asset_id === selectedAssetId.value &&
+      transaction.strategy === selectedStrategy.value
   )
 )
 
@@ -539,7 +555,8 @@ async function saveFill() {
       amount: fillForm.amount,
       fees: fillForm.fees,
       currency_id: asset.currency_id,
-      notes: fillForm.notes
+      notes: fillForm.notes,
+      strategy: selectedStrategy.value
     })
     showFillDialog.value = false
     await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
@@ -662,6 +679,12 @@ onMounted(async () => {
   justify-content: space-between;
   width: 100%;
   margin: 0;
+}
+
+.chart-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .chart-title {
