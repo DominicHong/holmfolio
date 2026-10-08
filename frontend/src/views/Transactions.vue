@@ -87,6 +87,12 @@
         <template #name="{ row }">
           {{ getAssetName(row.asset_id) }}
         </template>
+        <template #strategy="{ row }">
+          <el-tag v-if="row.strategy" size="small" type="warning" effect="plain">
+            {{ strategyShortLabel(row.strategy) }}
+          </el-tag>
+          <span v-else class="strategy-empty">—</span>
+        </template>
       </SharedDataTable>
     </el-card>
     
@@ -165,6 +171,21 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item label="Strategy" prop="strategy">
+          <el-select
+            v-model="transactionForm.strategy"
+            clearable
+            placeholder="None (not part of a strategy)"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="option in STRATEGY_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="Notes" prop="notes">
           <el-input v-model="transactionForm.notes" type="textarea" />
         </el-form-item>
@@ -296,6 +317,7 @@ import { useUIStore } from '../stores'
 import type { Transaction, Asset, MissingDividendItem, CheckDividendsResponse } from '../types/models'
 import dayjs from 'dayjs'
 import SharedDataTable from '../components/SharedDataTable.vue'
+import { STRATEGY_OPTIONS, strategyShortLabel } from '../utils/strategies'
 import { ElMessageBox } from 'element-plus'
 import { showError, showSuccess, showWarning, handleApiError } from '../utils/errorHandler'
 import { Refresh } from '@element-plus/icons-vue'
@@ -339,6 +361,7 @@ interface TransactionFormData {
   amount: number | null
   fees: number
   currency_id: number
+  strategy: string | null
   notes: string
   portfolio_id?: number
 }
@@ -352,6 +375,7 @@ const transactionForm = reactive<TransactionFormData>({
   amount: null,
   fees: 0,
   currency_id: 1,
+  strategy: null,
   notes: ''
 })
 
@@ -388,6 +412,7 @@ const tableColumns = computed(() => [
   { prop: 'price', label: 'Price', minWidth: '100', align: 'right', type: 'currency' },
   { prop: 'amount', label: 'Amount', minWidth: '120', align: 'right', type: 'currency', decimalPlaces: 0 },
   { prop: 'fees', label: 'Fees', minWidth: '100', align: 'right', type: 'currency' },
+  { prop: 'strategy', label: 'Strategy', minWidth: '90', type: 'custom' },
   { prop: 'notes', label: 'Notes', minWidth: '150' },
   { 
     prop: 'actions', 
@@ -487,6 +512,7 @@ const saveTransaction = async () => {
 
     const transactionData = {
       ...transactionForm,
+      strategy: transactionForm.strategy || null,
       portfolio_id: portfolioId
     }
 
@@ -516,6 +542,7 @@ const resetTransactionForm = () => {
   transactionForm.amount = null
   transactionForm.fees = 0
   transactionForm.currency_id = 1
+  transactionForm.strategy = null
   transactionForm.notes = ''
   isEditing.value = false
   editingTransactionId.value = null
@@ -532,6 +559,7 @@ const editTransaction = (transaction: Transaction): void => {
   transactionForm.amount = transaction.amount ?? null
   transactionForm.fees = transaction.fees || 0
   transactionForm.currency_id = transaction.currency_id ?? 1
+  transactionForm.strategy = transaction.strategy ?? null
   transactionForm.notes = transaction.notes || ''
   showAddDialog.value = true
 }
@@ -777,5 +805,9 @@ onMounted(() => {
 
 .upload-demo {
   text-align: center;
+}
+
+.strategy-empty {
+  color: #c0c4cc;
 }
 </style>

@@ -247,6 +247,7 @@ import { Plus, Refresh, RefreshRight } from '@element-plus/icons-vue'
 import { useGoldStore, usePortfolioStore, useTransactionStore } from '../stores'
 import { formatCurrency, formatNumber, formatPercentage, formatQuantity } from '../utils/formatters'
 import { handleApiError, showSuccess, showWarning } from '../utils/errorHandler'
+import { DEFAULT_STRATEGY, STRATEGY_OPTIONS as strategyOptions } from '../utils/strategies'
 import OverviewCard from '../components/OverviewCard.vue'
 import SharedDataTable from '../components/SharedDataTable.vue'
 import GoldPerformanceChart from '../components/GoldPerformanceChart.vue'
@@ -257,13 +258,8 @@ const goldStore = useGoldStore()
 const portfolioStore = usePortfolioStore()
 const transactionStore = useTransactionStore()
 
-const strategyOptions = [
-  { value: 's1a_ma_cross_trailing', label: 's1a Dual-MA trend + ATR trailing stop (default)' },
-  { value: 's1b_vol_target_ma_cross', label: 's1b Dual-MA trend + vol-target position sizing' }
-]
-
 const selectedAssetId = ref<number | null>(null)
-const selectedStrategy = ref('s1a_ma_cross_trailing')
+const selectedStrategy = ref(DEFAULT_STRATEGY)
 const defaultStart = dayjs().subtract(1, 'year').format('YYYY-MM-DD')
 const dateRange = ref<[string, string] | null>([defaultStart, dayjs().format('YYYY-MM-DD')])
 const loading = ref(false)

@@ -292,6 +292,7 @@ Use the provided startup scripts to launch both servers:
 ### Transactions (`/transactions`)
 
 - Manual entry of buy/sell/dividend/cash transactions
+- Optional strategy assignment on add/edit to group gold trades per (asset, strategy)
 - CSV/ZIP import (standard and Xueqiu format with auto-encoding detection)
 - Filterable and sortable transaction history
 - Bulk delete and export
