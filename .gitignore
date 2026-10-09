@@ -87,9 +87,6 @@ data/private/
 # Project specific - IDE workspace
 FXIncome.code-workspace
 
-# iFind MCP auth token (written from .env IFIND_MCP_KEY)
-backend/ai/ifind-finance-data/mcp_config.json
-
 # Logs
 *.log
 .vercel/project.json

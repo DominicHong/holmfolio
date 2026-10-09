@@ -9,9 +9,23 @@ from decimal import Decimal
 from dotenv import dotenv_values
 from backend import logger
 from backend.ai.ai_client import ai_agent_client
-from iFinDPy import THS_iFinDLogin, THS_HD, THS_HQ, THS_BD
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+
+try:
+    from iFinDPy import THS_iFinDLogin, THS_HD, THS_HQ, THS_BD
+
+    IFIND_SDK_AVAILABLE = True
+except ImportError:
+    # iFinDPy ships Windows/Linux builds only: on platforms without it
+    # (e.g. macOS) every THS-based feature falls back to the iFinD HTTP API.
+    IFIND_SDK_AVAILABLE = False
+    THS_iFinDLogin = THS_HD = THS_HQ = THS_BD = None
+    logger.warning(
+        "iFinDPy SDK is not available; using the iFinD HTTP API fallback "
+        "(set IFIND_DATASOURCE_KEY in .env)"
+    )
 
 ROOT_PATH = Path(__file__).parent.parent
 HK_STOCK_CACHE_FILE = ROOT_PATH / "data" / "hk_stock_cache.json"
@@ -677,6 +691,8 @@ class AKShareDataSource:
 class THSDataSource:
     _instance = None
     _initialized = False
+    # Stored in the DB ``source`` column for fetched prices.
+    _source_name = "ths"
 
     def __new__(cls):
         if cls._instance is None:
@@ -684,12 +700,11 @@ class THSDataSource:
         return cls._instance
 
     def __init__(self):
-        if THSDataSource._initialized:
+        if self._initialized:
             return
 
-        super().__init__()
         self.login_status: int | None = None
-        THSDataSource._initialized = True
+        self._initialized = True
 
     def _ensure_login(self) -> None:
         """Login on the first THS API call instead of at import time."""
@@ -698,6 +713,10 @@ class THSDataSource:
 
     def _login(self) -> int:
         """Login to THS using the iFinD credentials from the repo root .env."""
+        if not IFIND_SDK_AVAILABLE:
+            logger.error("iFinDPy SDK is not available; THS login skipped")
+            self.login_status = -1
+            return self.login_status
         user = _ENV.get("IFIND_USER")
         password = _ENV.get("IFIND_PASSWORD")
         if not user or not password:
@@ -1175,6 +1194,40 @@ class THSDataSource:
 
         return cache
 
+    def _query_basic_data(self, symbols: str, indicators: str, params: str | None):
+        """Call the THS basic-data API (``THS_BD``) and return its result object.
+
+        The result exposes ``errorcode`` / ``errmsg`` / ``data`` like the THS
+        SDK. Subclasses override this primitive to swap the transport while
+        reusing all parsing logic (see :class:`IFindHTTPDataSource`).
+        """
+        if not IFIND_SDK_AVAILABLE:
+            return SimpleNamespace(
+                errorcode=-1,
+                errmsg="iFinDPy SDK is not available",
+                data=pd.DataFrame(),
+            )
+        self._ensure_login()
+        return THS_BD(symbols, indicators, params)
+
+    def _query_history_quotes(
+        self,
+        symbol: str,
+        indicators: str,
+        params: str,
+        start_date: str,
+        end_date: str,
+    ):
+        """Call the THS history-quote API (``THS_HQ``) and return its result object."""
+        if not IFIND_SDK_AVAILABLE:
+            return SimpleNamespace(
+                errorcode=-1,
+                errmsg="iFinDPy SDK is not available",
+                data=pd.DataFrame(),
+            )
+        self._ensure_login()
+        return THS_HQ(symbol, indicators, params, start_date, end_date)
+
     def _get_dividend_or_none(self, symbol: str, report_date: str, retry: bool = True) -> float | None:
         """Get dividend per share before tax for a report date, excluding special dividends.
 
@@ -1194,8 +1247,9 @@ class THSDataSource:
             ``None`` if the data cannot be read.
         """
         # "BB" for original currency
-        self._ensure_login()
-        ths_result = THS_BD(symbol, "divi_per_share_btax_exspecial", f"{report_date},BB")
+        ths_result = self._query_basic_data(
+            symbol, "divi_per_share_btax_exspecial", f"{report_date},BB"
+        )
         if ths_result.errorcode != 0:
             if retry and self._reconnect_if_needed(ths_result.errorcode):
                 return self._get_dividend_or_none(symbol, report_date, retry=False)
@@ -1250,8 +1304,9 @@ class THSDataSource:
         Returns:
             Cumulative net income in CNY, or None if failed or not available.
         """
-        self._ensure_login()
-        ths_result = THS_BD(symbol, "ni_attr_to_cs", f"{report_date},1,CNY")
+        ths_result = self._query_basic_data(
+            symbol, "ni_attr_to_cs", f"{report_date},1,CNY"
+        )
         if ths_result.errorcode != 0:
             if retry and self._reconnect_if_needed(ths_result.errorcode):
                 return self._get_cumulative_net_income(symbol, report_date, retry=False)
@@ -1518,8 +1573,7 @@ class THSDataSource:
         indicators = "total_shares;equity_belong_to_parent"
         symbols_str = ",".join(normalized_symbols)
 
-        self._ensure_login()
-        ths_result = THS_BD(symbols_str, indicators, params)
+        ths_result = self._query_basic_data(symbols_str, indicators, params)
         if ths_result.errorcode != 0:
             if retry and self._reconnect_if_needed(ths_result.errorcode):
                 return self.get_stock_financials(symbols, as_of_date, retry=False)
@@ -1589,12 +1643,15 @@ class THSDataSource:
             case _:  # 不复权
                 params = ""
         
-        self._ensure_login()
         match asset_type:
             case "bond":
-                ths_result = THS_HQ(symbol, 'close', "PriceType:2", start_str, end_str)
+                ths_result = self._query_history_quotes(
+                    symbol, "close", "PriceType:2", start_str, end_str
+                )
             case _:
-                ths_result = THS_HQ(symbol, 'close', params, start_str, end_str)
+                ths_result = self._query_history_quotes(
+                    symbol, "close", params, start_str, end_str
+                )
         
         if ths_result.errorcode != 0:
             if retry and self._reconnect_if_needed(ths_result.errorcode):
@@ -1611,7 +1668,7 @@ class THSDataSource:
         df = ths_result.data.rename(columns={"time": "date"})
         df["date"] = pd.to_datetime(df["date"]).dt.date
         df = df[(df["date"] >= start_date) & (df["date"] <= end_date)]
-        return df[["date", "close"]], "ths"
+        return df[["date", "close"]], self._source_name
 
     def fetch_historical_daily(
         self,
@@ -1636,6 +1693,11 @@ class THSDataSource:
             DataFrame with date/open/high/low/close/volume/amt columns,
             or an empty DataFrame when unavailable.
         """
+        if not IFIND_SDK_AVAILABLE:
+            logger.error(
+                f"iFinDPy SDK is not available; cannot fetch daily bars for {code}"
+            )
+            return pd.DataFrame()
         fields = ";".join(DAILY_BAR_FIELDS)
         self._ensure_login()
         ths_result = THS_HD(
@@ -1662,19 +1724,50 @@ class THSDataSource:
         return normalize_daily_bars(ths_result.data, start_date, end_date)
 
 
-class IFindHTTPDataSource:
-    """iFinD HTTP fallback for daily bars.
+class IFindHTTPDataSource(THSDataSource):
+    """iFinD HTTP data source used when the local iFinDPy SDK is unavailable.
 
-    Used when the SDK is unavailable; authenticates with the
-    IFIND_DATASOURCE_KEY refresh token from the repo root .env.
+    The iFinD HTTP API (``quantapi.51ifind.com``) exposes the same data as the
+    local SDK but only needs the ``IFIND_DATASOURCE_KEY`` refresh token from
+    the repo root .env, so it works on platforms without an iFinDPy build
+    (e.g. macOS).
+
+    All report-window / dividend-tax / TTM logic is inherited from
+    :class:`THSDataSource`; only the network primitives are replaced:
+
+    - :meth:`_query_basic_data` -> ``POST /basic_data_service`` (``THS_BD``)
+    - :meth:`_query_history_quotes` -> ``POST /cmd_history_quotation`` (``THS_HQ``)
+    - :meth:`fetch_historical_daily` -> ``POST /cmd_history_quotation`` (``THS_HD``)
     """
 
+    # Own singleton: THSDataSource.__new__ keys on cls._instance, so without
+    # this attribute the subclass constructor would return the SDK singleton.
+    _instance = None
+    _source_name = "ifind_http"
+
     def __init__(self):
+        if getattr(self, "_http_initialized", False):
+            return
+        super().__init__()
         self._access_token: str | None = None
+        self._http_initialized = True
 
     @property
     def configured(self) -> bool:
+        """True when the IFIND_DATASOURCE_KEY refresh token is present."""
         return bool(_ENV.get("IFIND_DATASOURCE_KEY"))
+
+    # ------------------------------------------------------------------
+    # HTTP plumbing
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _auth_headers(access_token: str) -> dict:
+        return {
+            "Content-Type": "application/json",
+            "access_token": access_token,
+            "ifindlang": "cn",
+        }
 
     def _post_json(self, url: str, headers: dict, payload: dict) -> dict:
         request = urllib.request.Request(
@@ -1687,23 +1780,206 @@ class IFindHTTPDataSource:
             return json.loads(response.read().decode("utf-8"))
 
     def _get_access_token(self) -> str | None:
+        """Fetch and cache an access token using IFIND_DATASOURCE_KEY."""
         key = _ENV.get("IFIND_DATASOURCE_KEY")
         if not key:
-            logger.error("Missing IFIND_DATASOURCE_KEY in .env; HTTP fallback skipped")
+            logger.error(
+                "Missing IFIND_DATASOURCE_KEY in .env; iFinD HTTP request skipped"
+            )
             return None
-        token = self._post_json(
-            f"{IFIND_HTTP_BASE}/get_access_token",
-            {"Content-Type": "application/json", "refresh_token": key},
-            {},
-        )
+        try:
+            token = self._post_json(
+                f"{IFIND_HTTP_BASE}/get_access_token",
+                {"Content-Type": "application/json", "refresh_token": key},
+                {},
+            )
+        except Exception as e:
+            logger.error(f"iFinD HTTP get_access_token failed: {e}")
+            return None
         if token.get("errorcode") != 0:
             logger.error(
                 f"iFinD HTTP access_token failed (errorcode={token.get('errorcode')}): "
                 f"{token.get('errmsg')}"
             )
             return None
-        self._access_token = token["data"]["access_token"]
+        self._access_token = (token.get("data") or {}).get("access_token")
+        if not self._access_token:
+            logger.error("iFinD HTTP access_token response carries no token")
         return self._access_token
+
+    def _request(self, endpoint: str, payload: dict) -> dict:
+        """POST to an iFinD HTTP endpoint, refreshing a stale token once.
+
+        Returns the raw JSON response. Network failures are logged and turned
+        into ``{"errorcode": -1, ...}`` so callers never see an exception.
+        """
+        fresh_token = self._access_token is None
+        access_token = self._access_token or self._get_access_token()
+        if not access_token:
+            return {
+                "errorcode": -1,
+                "errmsg": "iFinD HTTP access token unavailable",
+            }
+
+        try:
+            result = self._post_json(
+                f"{IFIND_HTTP_BASE}/{endpoint}",
+                self._auth_headers(access_token),
+                payload,
+            )
+        except Exception as e:
+            logger.error(f"iFinD HTTP {endpoint} request failed: {e}")
+            return {"errorcode": -1, "errmsg": str(e)}
+
+        if result.get("errorcode") != 0:
+            if not fresh_token:
+                # A stale cached access token is the most common cause:
+                # drop it, fetch a new one and retry once before giving up.
+                logger.warning(
+                    f"iFinD HTTP {endpoint} failed "
+                    f"(errorcode={result.get('errorcode')}): {result.get('errmsg')}; "
+                    f"refreshing access token"
+                )
+                self._access_token = None
+                return self._request(endpoint, payload)
+            logger.error(
+                f"iFinD HTTP {endpoint} failed (errorcode={result.get('errorcode')}): "
+                f"{result.get('errmsg')}"
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # Response conversion (same layout as the SDK results)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _tables_to_frame(result: dict) -> pd.DataFrame:
+        """Flatten a ``basic_data_service`` response into a THS_BD-like frame.
+
+        Each table entry becomes one row with a ``thscode`` column plus one
+        column per indicator (first value only).
+        """
+        rows = []
+        for entry in result.get("tables") or []:
+            row = {"thscode": entry.get("thscode")}
+            for column, values in (entry.get("table") or {}).items():
+                if isinstance(values, list):
+                    row[column] = values[0] if values else None
+                else:
+                    row[column] = values
+            rows.append(row)
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def _history_tables_to_frame(result: dict) -> pd.DataFrame:
+        """Flatten a history-quote response into a THS_HQ-like frame.
+
+        Carries the ``time`` column (renamed to ``date`` by the caller) and
+        one column per indicator.
+        """
+        frames = []
+        for entry in result.get("tables") or []:
+            times = entry.get("time")
+            if not times:
+                continue
+            data = {"time": times}
+            data.update(entry.get("table") or {})
+            frame = pd.DataFrame(data)
+            frame["thscode"] = entry.get("thscode")
+            frames.append(frame)
+        if not frames:
+            return pd.DataFrame()
+        return pd.concat(frames, ignore_index=True)
+
+    @staticmethod
+    def _parse_history_params(params: str) -> dict:
+        """Convert THS_HQ style params (``CPS:2;``) into HTTP ``functionpara``."""
+        functionpara = {}
+        for item in (params or "").split(";"):
+            item = item.strip()
+            if not item or ":" not in item:
+                continue
+            key, value = item.split(":", 1)
+            functionpara[key.strip()] = value.strip()
+        return functionpara
+
+    # ------------------------------------------------------------------
+    # Transport overrides (same result contract as the SDK methods)
+    # ------------------------------------------------------------------
+
+    def _ensure_login(self) -> None:
+        """The HTTP API authenticates per request; no session login is needed."""
+
+    def _reconnect_if_needed(self, error_code: int) -> bool:
+        """The HTTP API has no persistent session to reconnect."""
+        return False
+
+    def _query_basic_data(self, symbols: str, indicators: str, params: str | None):
+        """``THS_BD`` over HTTP: ``POST /basic_data_service``."""
+        indicator_list = [name for name in indicators.split(";") if name]
+        param_groups = params.split(";") if params else []
+        indipara = []
+        for index, indicator in enumerate(indicator_list):
+            raw = param_groups[index] if index < len(param_groups) else ""
+            indiparams = raw.split(",") if raw else []
+            indipara.append({"indicator": indicator, "indiparams": indiparams})
+
+        result = self._request(
+            "basic_data_service", {"codes": symbols, "indipara": indipara}
+        )
+        errorcode = result.get("errorcode")
+        if errorcode != 0:
+            logger.error(
+                f"iFinD HTTP basic data failed for {symbols} ({indicators}) "
+                f"(errorcode={errorcode}): {result.get('errmsg')}"
+            )
+            return SimpleNamespace(
+                errorcode=errorcode if errorcode is not None else -1,
+                errmsg=result.get("errmsg", ""),
+                data=pd.DataFrame(),
+            )
+        return SimpleNamespace(
+            errorcode=0,
+            errmsg=result.get("errmsg", ""),
+            data=self._tables_to_frame(result),
+        )
+
+    def _query_history_quotes(
+        self,
+        symbol: str,
+        indicators: str,
+        params: str,
+        start_date: str,
+        end_date: str,
+    ):
+        """``THS_HQ`` over HTTP: ``POST /cmd_history_quotation``."""
+        payload = {
+            "codes": symbol,
+            "indicators": indicators,
+            "startdate": start_date,
+            "enddate": end_date,
+        }
+        functionpara = self._parse_history_params(params)
+        if functionpara:
+            payload["functionpara"] = functionpara
+
+        result = self._request("cmd_history_quotation", payload)
+        errorcode = result.get("errorcode")
+        if errorcode != 0:
+            logger.error(
+                f"iFinD HTTP history quotes failed for {symbol} "
+                f"(errorcode={errorcode}): {result.get('errmsg')}"
+            )
+            return SimpleNamespace(
+                errorcode=errorcode if errorcode is not None else -1,
+                errmsg=result.get("errmsg", ""),
+                data=pd.DataFrame(),
+            )
+        return SimpleNamespace(
+            errorcode=0,
+            errmsg=result.get("errmsg", ""),
+            data=self._history_tables_to_frame(result),
+        )
 
     def fetch_historical_daily(
         self,
@@ -1712,17 +1988,8 @@ class IFindHTTPDataSource:
         end_date: date,
     ) -> pd.DataFrame:
         """Fetch daily bars over HTTP, mirroring THSDataSource.fetch_historical_daily."""
-        access_token = self._access_token or self._get_access_token()
-        if not access_token:
-            return pd.DataFrame()
-
-        result = self._post_json(
-            f"{IFIND_HTTP_BASE}/cmd_history_quotation",
-            {
-                "Content-Type": "application/json",
-                "access_token": access_token,
-                "ifindlang": "cn",
-            },
+        result = self._request(
+            "cmd_history_quotation",
             {
                 "codes": code,
                 "indicators": ",".join(
@@ -1734,15 +2001,10 @@ class IFindHTTPDataSource:
             },
         )
         if result.get("errorcode") != 0:
-            logger.error(
-                f"iFinD HTTP daily bars failed (errorcode={result.get('errorcode')}): "
-                f"{result.get('errmsg')}"
-            )
-            self._access_token = None
             return pd.DataFrame()
 
         tables = result.get("tables") or []
-        if not tables or not tables[0].get("table"):
+        if not tables:
             return pd.DataFrame()
 
         table = tables[0]
@@ -1774,7 +2036,10 @@ def normalize_daily_bars(
     return df.reset_index(drop=True)[["date", *DAILY_BAR_FIELDS]]
 
 
-# Global instance for convenience
+# Global instances. The HTTP source is always constructed (the gold data
+# loader uses it as an explicit fallback); ``ths_source`` points at the local
+# SDK when it is installed and at the HTTP API otherwise, so every service
+# that imports ``ths_source`` keeps working on platforms without iFinDPy.
 akshare_source = AKShareDataSource()
-ths_source = THSDataSource()
 ifind_http_source = IFindHTTPDataSource()
+ths_source = THSDataSource() if IFIND_SDK_AVAILABLE else ifind_http_source

@@ -17,7 +17,11 @@ from pathlib import Path
 import pandas as pd
 
 from backend import logger
-from backend.data_source import ifind_http_source, ths_source
+from backend.data_source import (
+    IFIND_SDK_AVAILABLE,
+    ifind_http_source,
+    ths_source,
+)
 from backend.strat.common.constants import AU9999_DAILY_CSV, GOLD_ETF_DAILY_CSV
 
 CSV_COLUMNS = ["date", "open", "high", "low", "close", "volume", "amt"]
@@ -108,6 +112,8 @@ def fetch_daily(
 ) -> pd.DataFrame:
     """Fetch daily bars via iFinD SDK (THS_HD) with HTTP fallback.
 
+    When the SDK is unavailable (e.g. macOS) only the HTTP fallback is tried.
+
     Returns date/open/high/low/close/volume/amt (amt in 亿元); an empty
     DataFrame when unavailable.
     """
@@ -123,7 +129,10 @@ def fetch_daily(
         raise ValueError(f"Unknown data source: {source}")
 
     errors: list[str] = []
-    for name in ("sdk", "http"):
+    # Without the local SDK the two fetchers are the same HTTP source; only
+    # try it once.
+    sources = ("sdk", "http") if IFIND_SDK_AVAILABLE else ("http",)
+    for name in sources:
         try:
             frame = fetchers[name]()
         except Exception as exc:  # noqa: BLE001 - fall back on any fetch failure

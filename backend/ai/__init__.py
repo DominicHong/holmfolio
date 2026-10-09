@@ -8,11 +8,6 @@ from backend.ai.ai_client import (
     DEFAULT_MODEL,
     DEFAULT_REASONING_EFFORT,
 )
-from backend.ai.ifind_mcp_agent import (
-    IFindMCPAgent,
-    ifind_mcp_agent,
-    IFIND_MCP_KEY_ENV,
-)
 
 __all__ = [
     "AIAgentClient",
@@ -21,7 +16,4 @@ __all__ = [
     "DEEPSEEK_ENDPOINT",
     "DEFAULT_MODEL",
     "DEFAULT_REASONING_EFFORT",
-    "IFindMCPAgent",
-    "ifind_mcp_agent",
-    "IFIND_MCP_KEY_ENV",
 ]

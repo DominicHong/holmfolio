@@ -31,9 +31,9 @@ uvicorn backend.main:app --reload
 
 `backend/main.py` `lifespan` runs on app start: creates tables, backfills prices/exchange-rates/benchmark-prices up to **yesterday**, then ensures positions up to **today**. This hits AKShare + THS external APIs and can be slow / network-dependent. With no existing price rows it logs and skips. Don't assume `uvicorn` is ready the instant it prints the banner.
 
-## THS / iFinDPy SDK is required for the live backend
+## THS / iFinDPy SDK and the HTTP fallback
 
-`backend/data_source.py` does a top-level `from iFinDPy import ...`. Importing it (transitively via `main.py` → `price_rate` service) fails if the THS SDK isn't installed. The repo assumes iFinDPy is available locally; `backend/data_source.py` also instantiates module-level singletons `akshare_source` and `ths_source`.
+`backend/data_source.py` imports `iFinDPy` at module level but guards the import: when the module is missing (e.g. on macOS, where iFinDPy has no build), importing `backend.data_source` and starting `uvicorn` still works. In that case the module-level `ths_source` points at `IFindHTTPDataSource`, which implements the same interface (`fetch_historical_prices`, `fetch_historical_daily`, `get_dividend_after_tax_past_year`, `get_stock_financials`) over the iFinD HTTP API using `IFIND_DATASOURCE_KEY` from `.env`. Services import `ths_source` and need no changes. When the SDK is present, `ths_source` is the SDK-backed `THSDataSource` as before, and `ifind_http_source` stays available for the gold data loader's explicit HTTP fallback. `IFIND_SDK_AVAILABLE` in `backend/data_source.py` tells you which one is active.
 
 ## Tests
 

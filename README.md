@@ -197,8 +197,8 @@ holmfolio/
 - Node.js 22+
 - npm
 - (Optional) Conda environment named `holmfolio`
-- (Optional) THS (同花顺) terminal login for historical price/financial data
-- (Optional) iFinD account credentials in the repo-root `.env` for gold daily-bar updates: `IFIND_USER`, `IFIND_PASSWORD` (SDK), `IFIND_DATASOURCE_KEY` (HTTP fallback)
+- (Optional) THS (同花顺) terminal login for historical price/financial data. On platforms without an iFinDPy build (e.g. macOS) the backend automatically uses the iFinD HTTP API instead.
+- (Optional) iFinD account credentials in the repo-root `.env` for gold daily-bar updates and the HTTP fallback: `IFIND_USER`, `IFIND_PASSWORD` (SDK), `IFIND_DATASOURCE_KEY` (HTTP API refresh token)
 
 ### Backend Setup
 
@@ -592,11 +592,11 @@ The test fixture (`tests/conftest.py`) creates a temporary SQLite database with 
 
 ### Data Sources
 
-Two independent data sources (`backend/data_source.py`) with module-level singletons:
+Three data sources (`backend/data_source.py`) with module-level singletons:
 
 - **AKShareDataSource** (`akshare_source`): Open-source via akshare. Used for exchange rates via `currency_boc_sina()` with fallback mechanisms. Covers A-shares, HK stocks, ETFs, bonds.
 - **THSDataSource** (`ths_source`): TongHuaShun/同花顺 terminal login (credentials from `.env`). Used for historical stock/ETF prices and financial data (dividends, net income, equity), plus daily OHLCV bars via `THS_HD` for the gold data loader. Has reconnection logic.
-- **IFindHTTPDataSource** (`ifind_http_source`): iFinD HTTP fallback for gold daily bars, authenticated with `IFIND_DATASOURCE_KEY`.
+- **IFindHTTPDataSource** (`ifind_http_source`): iFinD HTTP API (`quantapi.51ifind.com`), authenticated with `IFIND_DATASOURCE_KEY`. Implements the same interface as `THSDataSource` (historical prices, dividends, stock financials, daily OHLCV bars) purely over HTTP, so it needs no SDK. When the iFinDPy module is not importable (e.g. on macOS), `ths_source` automatically points at this source and the app keeps working.
 
 ### Data Flow
 

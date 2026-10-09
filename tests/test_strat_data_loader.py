@@ -99,6 +99,20 @@ def test_fetch_daily_falls_back_to_http(monkeypatch):
     assert list(result["date"]) == [date(2024, 1, 3)]
 
 
+def test_fetch_daily_skips_sdk_when_unavailable(monkeypatch):
+    sdk = FakeSource(_frame(date(2024, 1, 3)))
+    http = FakeSource(_frame(date(2024, 1, 3)))
+    monkeypatch.setattr(data_loader, "IFIND_SDK_AVAILABLE", False)
+    monkeypatch.setattr(data_loader, "ths_source", sdk)
+    monkeypatch.setattr(data_loader, "ifind_http_source", http)
+
+    result = data_loader.fetch_daily("AU9999.SHG", date(2024, 1, 1), date(2024, 1, 5))
+
+    assert sdk.calls == 0
+    assert http.calls == 1
+    assert list(result["date"]) == [date(2024, 1, 3)]
+
+
 def test_fetch_daily_rejects_unknown_source():
     with pytest.raises(ValueError):
         data_loader.fetch_daily("AU9999.SHG", date(2024, 1, 1), date(2024, 1, 5), source="bogus")
