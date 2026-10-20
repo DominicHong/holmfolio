@@ -526,7 +526,8 @@ const saveTransaction = async () => {
 
     showAddDialog.value = false
     resetTransactionForm()
-    // Refresh transactions after creating a new one
+    // Recalculate positions and refresh transactions after the change
+    await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
     await transactionStore.fetchTransactions(portfolioId)
   } catch (error) {
     handleApiError(error, 'Failed to save transaction')
@@ -578,6 +579,10 @@ const deleteTransaction = async (transaction: Transaction): Promise<void> => {
     )
 
     await transactionStore.deleteTransaction(transaction.id)
+    await portfolioStore.recalculatePositions({
+      portfolioId: transaction.portfolio_id,
+      asOfDate: null
+    })
     showSuccess('Transaction deleted successfully')
   } catch (error) {
     if (error !== 'cancel') {
@@ -606,6 +611,7 @@ const confirmDeleteAll = async () => {
     )
 
     await transactionStore.deleteAllTransactions(portfolioId)
+    await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
     showSuccess('All transactions deleted successfully')
   } catch (error) {
     if (error !== 'cancel') {
@@ -625,7 +631,8 @@ const handleXueqiuImportFile = async (file: File): Promise<boolean> => {
     const result = await transactionStore.importXueqiuTransactions(file, portfolioId)
     showSuccess(result.message)
     showXueqiuImportDialog.value = false
-    // Refresh both transactions and assets after import
+    // Recalculate positions and refresh transactions and assets after import
+    await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
     await Promise.all([
       transactionStore.fetchTransactions(portfolioId),
       assetStore.fetchAssets()
