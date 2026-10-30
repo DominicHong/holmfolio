@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="title-row">
         <h2 class="page-title">Portfolio Positions</h2>
-        <el-button :icon="Refresh" @click="handleRefresh" circle aria-label="Refresh" />
+        <el-button :icon="Refresh" @click="initializePortfolio" circle aria-label="Refresh" />
       </div>
       <div class="position-controls">
         <el-tooltip content="Select the date for viewing positions, or as the end date when recalculating positions for every day from the first transaction" placement="top">
@@ -41,7 +41,7 @@
     <template v-else>
       <!-- Portfolio Summary -->
       <div v-if="positions.length > 0" class="portfolio-summary">
-        <el-row :gutter="20" class="overview-cards">
+        <el-row :gutter="20">
           <el-col :span="6">
             <OverviewCard
               title="Total Market Value"
@@ -78,80 +78,97 @@
         </el-row>
       </div>
 
-      <!-- All Positions Summary Table -->
+      <!-- All Positions Summary Table (collapsible, expanded by default) -->
       <div v-if="allPositionsSorted.length > 0" class="summary-table-section">
-        <div class="summary-table-header">
-          <h3 class="summary-table-title">All Positions</h3>
-          <el-button type="primary" @click="downloadPositionsCSV(allPositionsSorted, 'ALL', true)"
-            class="download-btn">
-            Download
-          </el-button>
-        </div>
-        <SharedDataTable :data="allPositionsSorted" :columns="summaryTableColumns" :loading="loading"
-          :empty-text="'No positions found'" class="summary-table" :show-summary="true"
-          :summary-method="(p: any) => getAllPositionsSummaryRow(p)">
-          <template #symbol="{ row }">
-            <router-link :to="{ name: 'PositionDetail', params: { assetId: row.asset_id } }" class="symbol-link">
-              {{ row.symbol }}
-            </router-link>
-          </template>
-        </SharedDataTable>
+        <el-collapse
+          class="section-collapse all-positions-collapse"
+          :model-value="isSectionCollapsed('ALL') ? [] : ['ALL']"
+          @update:model-value="(val: string[]) => setSectionCollapsed('ALL', val.length === 0)"
+        >
+          <el-collapse-item name="ALL">
+            <template #title>
+              <div class="collapse-title-row">
+                <h3 class="summary-table-title">All Positions</h3>
+                <el-button type="primary" size="small" class="download-btn"
+                  @click.stop="downloadPositionsCSV(allPositionsSorted, 'ALL', true)">
+                  Download
+                </el-button>
+              </div>
+            </template>
+            <SharedDataTable :data="allPositionsSorted" :columns="summaryTableColumns" :loading="loading"
+              :empty-text="'No positions found'" class="summary-table" :show-summary="true"
+              :summary-method="(p: any) => buildPositionsSummaryRow(p, 'Total All:')">
+              <template #symbol="{ row }">
+                <router-link :to="{ name: 'PositionDetail', params: { assetId: row.asset_id } }" class="symbol-link">
+                  {{ row.symbol }}
+                </router-link>
+              </template>
+            </SharedDataTable>
+          </el-collapse-item>
+        </el-collapse>
       </div>
 
-      <!-- History Positions (collapsed by default) -->
+      <!-- Currency Grouped Tables (collapsible, expanded by default) -->
+      <div v-for="currencyGroup in groupedPositions" :key="currencyGroup.currencyCode"
+        class="currency-table-section">
+        <el-collapse
+          class="section-collapse currency-collapse"
+          :model-value="isSectionCollapsed(currencyGroup.currencyCode) ? [] : [currencyGroup.currencyCode]"
+          @update:model-value="(val: string[]) => setSectionCollapsed(currencyGroup.currencyCode, val.length === 0)"
+        >
+          <el-collapse-item :name="currencyGroup.currencyCode">
+            <template #title>
+              <div class="collapse-title-row">
+                <h3 class="currency-table-title">Positions in {{ currencyGroup.currencyCode }}</h3>
+                <el-button type="primary" size="small" class="download-btn"
+                  @click.stop="downloadPositionsCSV(currencyGroup.positions, currencyGroup.currencyCode)">
+                  Download
+                </el-button>
+              </div>
+            </template>
+            <SharedDataTable :data="currencyGroup.positions" :columns="tableColumns" :loading="loading"
+              :empty-text="'No positions found in ' + currencyGroup.currencyCode" class="currency-table"
+              :show-summary="true" :summary-method="(p: any) => getSummaryRow(p, currencyGroup)">
+              <template #symbol="{ row }">
+                <router-link :to="{ name: 'PositionDetail', params: { assetId: row.asset_id } }" class="symbol-link">
+                  {{ row.symbol }}
+                </router-link>
+              </template>
+            </SharedDataTable>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+
+      <!-- History Positions (collapsed by default, placed at the bottom) -->
       <div v-if="historyPositionsSorted.length > 0" class="history-table-section">
-        <el-collapse v-model="historyCollapseActive" class="history-collapse">
+        <el-collapse v-model="historyCollapseActive" class="section-collapse history-collapse">
           <el-collapse-item name="history">
             <template #title>
               <div class="history-collapse-title">
-                <h3 class="summary-table-title history-title">History Positions</h3>
+                <h3 class="summary-table-title">History Positions</h3>
                 <el-tag size="small" type="info" effect="plain" class="history-count-tag">
                   {{ historyPositionsSorted.length }}
                 </el-tag>
               </div>
             </template>
-            <div class="history-content">
-              <div class="history-download-bar">
-                <el-button type="primary" size="small"
-                  @click.stop="downloadPositionsCSV(historyPositionsSorted, 'HISTORY', true)">
-                  Download
-                </el-button>
-              </div>
-              <SharedDataTable :data="historyPositionsSorted" :columns="historyTableColumns" :loading="loading"
-                :empty-text="'No history positions'" class="summary-table history-table" :show-summary="true"
-                :summary-method="(p: any) => getHistorySummaryRow(p)">
-                <template #symbol="{ row }">
-                  <router-link :to="{ name: 'PositionDetail', params: { assetId: row.asset_id } }"
-                    class="symbol-link">
-                    {{ row.symbol }}
-                  </router-link>
-                </template>
-              </SharedDataTable>
+            <div class="history-download-bar">
+              <el-button type="primary" size="small"
+                @click="downloadPositionsCSV(historyPositionsSorted, 'HISTORY', true)">
+                Download
+              </el-button>
             </div>
+            <SharedDataTable :data="historyPositionsSorted" :columns="historyTableColumns" :loading="loading"
+              :empty-text="'No history positions'" class="summary-table history-table" :show-summary="true"
+              :summary-method="(p: any) => buildPositionsSummaryRow(p, 'Total History:', false)">
+              <template #symbol="{ row }">
+                <router-link :to="{ name: 'PositionDetail', params: { assetId: row.asset_id } }"
+                  class="symbol-link">
+                  {{ row.symbol }}
+                </router-link>
+              </template>
+            </SharedDataTable>
           </el-collapse-item>
         </el-collapse>
-      </div>
-
-      <!-- Currency Grouped Tables -->
-      <div v-for="currencyGroup in groupedPositions" :key="currencyGroup.currencyCode"
-        class="currency-table-section">
-        <div class="currency-table-header">
-          <h3 class="currency-table-title">Positions in {{ currencyGroup.currencyCode }}</h3>
-          <el-button type="primary" @click="downloadPositionsCSV(currencyGroup.positions, currencyGroup.currencyCode)"
-            class="download-btn">
-            Download
-          </el-button>
-        </div>
-
-        <SharedDataTable :data="currencyGroup.positions" :columns="tableColumns" :loading="loading"
-          :empty-text="'No positions found in ' + currencyGroup.currencyCode" class="currency-table"
-          :show-summary="true" :summary-method="(p: any) => getSummaryRow(p, currencyGroup)">
-          <template #symbol="{ row }">
-            <router-link :to="{ name: 'PositionDetail', params: { assetId: row.asset_id } }" class="symbol-link">
-              {{ row.symbol }}
-            </router-link>
-          </template>
-        </SharedDataTable>
       </div>
     </template>
   </div>
@@ -160,9 +177,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'Portfolio' })
 import { computed, ref, onMounted, h } from 'vue'
-import { usePortfolioStore } from '../stores'
-import { useReferenceStore } from '../stores'
-import { useUIStore } from '../stores'
+import { usePortfolioStore, useReferenceStore, useUIStore } from '../stores'
 import SharedDataTable from '../components/SharedDataTable.vue'
 import OverviewCard from '../components/OverviewCard.vue'
 import { formatCurrency, formatDate } from '../utils/formatters'
@@ -178,6 +193,16 @@ const uiStore = useUIStore()
 const recalculateDate = ref(formatDate(new Date()))
 // History Positions table is collapsed by default
 const historyCollapseActive = ref<string[]>([])
+
+// Collapsed state for the All Positions / currency sub-tables, keyed by section
+// ('ALL' for the All Positions table, otherwise the currency code). Expanded by default.
+const collapsedSections = ref<Record<string, boolean>>({})
+
+const isSectionCollapsed = (key: string): boolean => !!collapsedSections.value[key]
+
+const setSectionCollapsed = (key: string, collapsed: boolean): void => {
+  collapsedSections.value[key] = collapsed
+}
 
 // Computed properties from stores
 const positions = computed(() => portfolioStore.positions)
@@ -304,8 +329,6 @@ const tableColumns = computed(() => [
   { prop: 'dividends', label: 'Div', minWidth: '110', align: 'right', type: 'currency', decimalPlaces: 0, sortable: true }
 ])
 
-
-
 // Always-truthy currency object for table columns. Avoids falling back to
 // each asset's own currency in SharedDataTable when primaryCurrency is not
 // yet loaded. Mirrors the pattern used in Dashboard.vue.
@@ -326,56 +349,34 @@ const summaryTableColumns = computed(() => [
   { prop: 'dividends_primary', label: 'Div', minWidth: '110', align: 'right', type: 'currency', currency: primaryCurrencyForColumns.value, decimalPlaces: 0, sortable: true }
 ])
 
-// Columns for the History Positions table (same shape as the All Positions summary)
-const historyTableColumns = computed(() => [
-  { prop: 'symbol', label: 'Symbol', minWidth: '100', type: 'custom' },
-  { prop: 'name', label: 'Name', minWidth: '150' },
-  { prop: 'quantity', label: 'Quantity', minWidth: '120', align: 'right', type: 'quantity', sortable: true },
-  { prop: 'current_price', label: 'Current Price', minWidth: '120', align: 'right', type: 'currency', currency: primaryCurrencyForColumns.value, sortable: true },
-  { prop: 'market_value_primary', label: 'Market Value', minWidth: '120', align: 'right', type: 'currency', currency: primaryCurrencyForColumns.value, decimalPlaces: 0, sortable: true },
-  { prop: 'total_pnl_primary', label: 'Total P&L', minWidth: '120', align: 'right', type: 'pnl', currency: primaryCurrencyForColumns.value, decimalPlaces: 0, sortable: true },
-  { prop: 'dividends_primary', label: 'Div', minWidth: '110', align: 'right', type: 'currency', currency: primaryCurrencyForColumns.value, decimalPlaces: 0, sortable: true }
-])
+// Columns for the History Positions table: same shape as the All Positions
+// summary, minus the percentages that are not meaningful for closed positions.
+const historyTableColumns = computed(() => {
+  const excludedProps = new Set(['mv_percent', 'pnl_percent'])
+  return summaryTableColumns.value.filter((column) => !excludedProps.has(column.prop))
+})
 
 // All positions sorted by market value (primary currency) in descending order
-const allPositionsSorted = computed<PositionWithPct[]>(() => {
-  const positionsWithPercentages = currentPositions.value.map((position) => {
-    const marketValuePrimary: number = position.market_value_primary || 0
-    const totalPnlPrimary: number = position.total_pnl_primary || 0
-
-    return {
-      ...position,
-      mv_percent: totalPortfolioMarketValue.value > 0
-        ? marketValuePrimary / totalPortfolioMarketValue.value
-        : 0,
-      pnl_percent: marketValuePrimary > 0
-        ? totalPnlPrimary / marketValuePrimary
-        : 0
-    } as PositionWithPct
-  })
-
-  // Sort by market_value_primary in descending order
-  return positionsWithPercentages.sort((a: PositionWithPct, b: PositionWithPct) => (b.market_value_primary || 0) - (a.market_value_primary || 0))
-})
+const allPositionsSorted = computed<PositionWithPct[]>(() =>
+  currentPositions.value
+    .map((position) => calculatePositionPercentages(position))
+    .sort((a: PositionWithPct, b: PositionWithPct) => (b.market_value_primary || 0) - (a.market_value_primary || 0))
+)
 
 // History positions sorted by realized P&L (primary currency) descending.
 // These all have market_value=0, so sorting by P&L is the most useful ordering.
-const historyPositionsSorted = computed<PositionWithPct[]>(() => {
-  const positionsWithPercentages = historyPositions.value.map((position) => {
-    const totalPnlPrimary: number = position.total_pnl_primary || 0
-
-    return {
+const historyPositionsSorted = computed<PositionWithPct[]>(() =>
+  historyPositions.value
+    // MV% and P&L% are not meaningful for closed positions; normalize a
+    // missing P&L to 0 so the footer and CSV export stay numeric.
+    .map((position) => ({
       ...position,
-      // MV% and P&L% are not meaningful for closed positions
       mv_percent: 0,
       pnl_percent: 0,
-      total_pnl_primary: totalPnlPrimary
-    } as PositionWithPct
-  })
-
-  return positionsWithPercentages.sort((a: PositionWithPct, b: PositionWithPct) =>
-    (b.total_pnl_primary || 0) - (a.total_pnl_primary || 0))
-})
+      total_pnl_primary: position.total_pnl_primary || 0
+    } as PositionWithPct))
+    .sort((a: PositionWithPct, b: PositionWithPct) => (b.total_pnl_primary || 0) - (a.total_pnl_primary || 0))
+)
 
 // ===== UTILITY FUNCTIONS =====
 
@@ -405,27 +406,31 @@ const disabledDate = (time: Date): boolean => {
 }
 
 /**
- * Generate summary row for all positions summary table
+ * Generate summary row for a positions table (All Positions / History).
+ * @param label Row label shown in the first column
+ * @param showMarketValue Whether to show the total market value (closed positions have none)
  */
-const getAllPositionsSummaryRow = (param: { columns: Array<{ property?: string }>; data: PositionWithPct[] }): (string | ReturnType<typeof h>)[] => {
+const buildPositionsSummaryRow = (param: { columns: Array<{ property?: string }>; data: PositionWithPct[] }, label: string, showMarketValue = true): (string | ReturnType<typeof h>)[] => {
   const { columns, data } = param
   const sums: (string | ReturnType<typeof h>)[] = []
   const primarySymbol = primaryCurrency.value?.symbol || '¥'
 
-  // Calculate totals from table data (all positions in the table)
+  // Calculate totals from the table's own data
   const totalMarketValue = data.reduce((sum: number, pos: PositionWithPct) => sum + (pos.market_value_primary || 0), 0)
   const totalPnl = data.reduce((sum: number, pos: PositionWithPct) => sum + (pos.total_pnl_primary || 0), 0)
   const totalDividends = data.reduce((sum: number, pos: PositionWithPct) => sum + (pos.dividends_primary || 0), 0)
 
   columns.forEach((column, index: number) => {
     if (index === 0) {
-      sums[index] = 'Total All:'
+      sums[index] = label
       return
     }
 
     switch (column.property) {
       case 'market_value_primary':
-        sums[index] = formatCurrency(totalMarketValue, { symbol: primarySymbol }, 0)
+        sums[index] = showMarketValue
+          ? formatCurrency(totalMarketValue, { symbol: primarySymbol }, 0)
+          : ''
         break
       case 'mv_percent': {
         const totalMvPercent = data.reduce((sum: number, pos: PositionWithPct) => sum + (pos.mv_percent || 0), 0)
@@ -456,40 +461,6 @@ const getAllPositionsSummaryRow = (param: { columns: Array<{ property?: string }
 }
 
 /**
- * Generate summary row for the History Positions table
- */
-const getHistorySummaryRow = (param: { columns: Array<{ property?: string }>; data: PositionWithPct[] }): (string | ReturnType<typeof h>)[] => {
-  const { columns, data } = param
-  const sums: (string | ReturnType<typeof h>)[] = []
-  const primarySymbol = primaryCurrency.value?.symbol || '¥'
-
-  const totalPnl = data.reduce((sum: number, pos: PositionWithPct) => sum + (pos.total_pnl_primary || 0), 0)
-  const totalDividends = data.reduce((sum: number, pos: PositionWithPct) => sum + (pos.dividends_primary || 0), 0)
-
-  columns.forEach((column, index: number) => {
-    if (index === 0) {
-      sums[index] = 'Total History:'
-      return
-    }
-
-    switch (column.property) {
-      case 'total_pnl_primary': {
-        const pnlClass = totalPnl >= 0 ? 'positive' : 'negative'
-        sums[index] = h('span', { class: pnlClass }, formatCurrency(totalPnl, { symbol: primarySymbol }, 0))
-        break
-      }
-      case 'dividends_primary':
-        sums[index] = formatCurrency(totalDividends, { symbol: primarySymbol }, 0)
-        break
-      default:
-        sums[index] = ''
-    }
-  })
-
-  return sums
-}
-
-/**
  * Generate summary row for currency group table
  */
 const getSummaryRow = (param: { columns: Array<{ property?: string }>; data: PositionWithPct[] }, currencyGroup: CurrencyGroup): (string | ReturnType<typeof h>)[] => {
@@ -498,7 +469,7 @@ const getSummaryRow = (param: { columns: Array<{ property?: string }>; data: Pos
 
   columns.forEach((column, index: number) => {
     if (index === 0) {
-      sums[index] = `Total ${currencyGroup.positions[0]?.currency?.code || ''}:`
+      sums[index] = `Total ${currencyGroup.currencyCode}:`
       return
     }
 
@@ -564,8 +535,6 @@ const initializePortfolio = async () => {
   }
 }
 
-
-
 // ===== DATA OPERATIONS =====
 
 /**
@@ -587,6 +556,19 @@ const validateOperation = () => {
 }
 
 /**
+ * Recalculate positions and reload them for the selected date
+ */
+const recalculatePositionsForSelectedDate = async (portfolioId: number): Promise<void> => {
+  const result = await portfolioStore.recalculatePositions({
+    portfolioId,
+    asOfDate: recalculateDate.value
+  })
+
+  showSuccess(result.message || 'Positions recalculated successfully')
+  await portfolioStore.fetchPositions(portfolioId, recalculateDate.value)
+}
+
+/**
  * Recalculate positions for the selected date
  */
 const handleRecalculate = async () => {
@@ -596,13 +578,7 @@ const handleRecalculate = async () => {
 
   uiStore.setLoading(true)
   try {
-    const result = await portfolioStore.recalculatePositions({
-      portfolioId: portfolio.id,
-      asOfDate: recalculateDate.value
-    })
-
-    showSuccess(result.message || 'Positions recalculated successfully')
-    await portfolioStore.fetchPositions(portfolio.id, recalculateDate.value)
+    await recalculatePositionsForSelectedDate(portfolio.id)
   } catch (error) {
     handleApiError(error, 'Failed to recalculate positions')
   } finally {
@@ -645,14 +621,7 @@ const recalculateForDate = async () => {
   showWarning('No positions found for the selected date. Recalculating positions...')
 
   try {
-    const result = await portfolioStore.recalculatePositions({
-      portfolioId: portfolio.id,
-      asOfDate: recalculateDate.value
-    })
-
-    showSuccess(result.message || 'Positions recalculated successfully')
-
-    await portfolioStore.fetchPositions(portfolio.id, recalculateDate.value)
+    await recalculatePositionsForSelectedDate(portfolio.id)
   } catch (error) {
     handleApiError(error, 'Failed to recalculate positions')
   }
@@ -667,7 +636,7 @@ const recalculateForDate = async () => {
  * @param {boolean} usePrimaryCurrency - Whether to use primary currency for monetary values
  */
 const downloadPositionsCSV = (positions: PositionWithPct[], currencyCode: string, usePrimaryCurrency = false): void => {
-  if (!positions || positions.length === 0) {
+  if (positions.length === 0) {
     showWarning('No positions to download')
     return
   }
@@ -729,11 +698,6 @@ const triggerDownload = (csvContent: string, filename: string): void => {
   setTimeout(() => URL.revokeObjectURL(url), 100)
 }
 
-// Refresh
-const handleRefresh = () => {
-  initializePortfolio()
-}
-
 // Initialize on component mount
 onMounted(() => {
   initializePortfolio()
@@ -763,12 +727,6 @@ onMounted(() => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
-.empty-state {
-  text-align: center;
-  padding: 40px;
-  color: #666;
-}
-
 .empty-state-card {
   background: #ffffff;
   border-radius: 12px;
@@ -776,21 +734,8 @@ onMounted(() => {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
-.empty-state {
-  text-align: center;
-  color: #666;
-}
-
-.empty-state p {
-  margin: 10px 0;
-}
-
 .portfolio-summary {
   margin-bottom: 24px;
-}
-
-.overview-cards {
-  margin-bottom: 0;
 }
 
 /* Modern Table Section Styles */
@@ -813,18 +758,14 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 
-.summary-table-header,
-.currency-table-header {
+.collapse-title-row {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-bottom: none;
-}
-
-.currency-table-header {
-  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 12px;
+  min-width: 0;
 }
 
 .summary-table-title,
@@ -866,39 +807,58 @@ onMounted(() => {
   color: #ffffff;
 }
 
-/* History Positions collapse section */
-.history-collapse {
+/* Collapsible table sections (All Positions / currency groups / History) */
+.section-collapse {
   border: none;
 }
 
-.history-collapse :deep(.el-collapse-item__header) {
+.section-collapse :deep(.el-collapse-item__header) {
   height: auto;
   line-height: 1.4;
   padding: 18px 24px;
-  background: linear-gradient(135deg, #8e9eab 0%, #6c7a89 100%);
   border-bottom: none;
   color: #ffffff;
   font-size: 16px;
   font-weight: 600;
 }
 
-.history-collapse :deep(.el-collapse-item__header:hover) {
-  background: linear-gradient(135deg, #9faab2 0%, #7a8794 100%);
-}
-
-.history-collapse :deep(.el-collapse-item__arrow) {
+.section-collapse :deep(.el-collapse-item__arrow) {
   color: #ffffff;
   font-size: 16px;
   margin-right: 8px;
 }
 
-.history-collapse :deep(.el-collapse-item__wrap) {
-  background: #ffffff;
+.section-collapse :deep(.el-collapse-item__wrap) {
   border-bottom: none;
 }
 
-.history-collapse :deep(.el-collapse-item__content) {
+.section-collapse :deep(.el-collapse-item__content) {
   padding: 0;
+}
+
+/* Per-section header gradients */
+.all-positions-collapse :deep(.el-collapse-item__header) {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.all-positions-collapse :deep(.el-collapse-item__header:hover) {
+  background: linear-gradient(135deg, #7583f0 0%, #8457b2 100%);
+}
+
+.currency-collapse :deep(.el-collapse-item__header) {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+
+.currency-collapse :deep(.el-collapse-item__header:hover) {
+  background: linear-gradient(135deg, #14a99b 0%, #4af58e 100%);
+}
+
+.history-collapse :deep(.el-collapse-item__header) {
+  background: linear-gradient(135deg, #8e9eab 0%, #6c7a89 100%);
+}
+
+.history-collapse :deep(.el-collapse-item__header:hover) {
+  background: linear-gradient(135deg, #9faab2 0%, #7a8794 100%);
 }
 
 .history-collapse-title {
@@ -907,34 +867,11 @@ onMounted(() => {
   gap: 12px;
 }
 
-.history-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  letter-spacing: 0.5px;
-}
-
-.history-title::before {
-  content: '';
-  width: 4px;
-  height: 20px;
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 2px;
-}
-
 .history-count-tag {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.4);
   color: #ffffff;
   font-weight: 600;
-}
-
-.history-content {
-  padding: 0;
 }
 
 .history-download-bar {
@@ -1088,8 +1025,7 @@ onMounted(() => {
 
 /* Large screens (1400px and up) */
 @media (min-width: 1400px) {
-  .summary-table-header,
-  .currency-table-header {
+  .section-collapse :deep(.el-collapse-item__header) {
     padding: 24px 32px;
   }
 
@@ -1101,11 +1037,6 @@ onMounted(() => {
 
 /* Medium screens (1024px - 1399px) */
 @media (max-width: 1399px) and (min-width: 1024px) {
-  .summary-table-header,
-  .currency-table-header {
-    padding: 18px 24px;
-  }
-
   .summary-table-title,
   .currency-table-title {
     font-size: 17px;
@@ -1133,13 +1064,6 @@ onMounted(() => {
 
   .portfolio-summary .el-col {
     margin-bottom: 16px;
-  }
-
-  .summary-table-header,
-  .currency-table-header {
-    padding: 16px 20px;
-    flex-wrap: wrap;
-    gap: 12px;
   }
 
   .summary-table-title,
@@ -1172,7 +1096,7 @@ onMounted(() => {
     font-size: 13px;
   }
 
-  .history-collapse :deep(.el-collapse-item__header) {
+  .section-collapse :deep(.el-collapse-item__header) {
     padding: 16px 20px;
   }
 }
@@ -1220,22 +1144,19 @@ onMounted(() => {
     border-radius: 12px;
   }
 
-  .summary-table-header,
-  .currency-table-header {
-    padding: 14px 16px;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .summary-table-title,
   .currency-table-title {
     font-size: 15px;
-    margin-bottom: 10px;
+    margin-bottom: 0;
   }
 
-  .download-btn {
-    width: 100%;
-    justify-content: center;
+  .section-collapse :deep(.el-collapse-item__header) {
+    padding: 14px 16px;
+  }
+
+  .collapse-title-row {
+    gap: 8px;
+    padding-right: 4px;
   }
 
   .summary-table :deep(.el-table__header th),
@@ -1256,15 +1177,6 @@ onMounted(() => {
   .history-table :deep(.el-table__footer td) {
     padding: 10px 4px;
     font-size: 12px;
-  }
-
-  .history-collapse :deep(.el-collapse-item__header) {
-    padding: 14px 16px;
-  }
-
-  .history-title {
-    font-size: 15px;
-    margin-bottom: 0;
   }
 
   .history-download-bar {
@@ -1303,24 +1215,5 @@ onMounted(() => {
   .history-table :deep(.el-table__body td) {
     font-size: 11px;
   }
-}
-
-/* Smooth transitions for window resize */
-.summary-table-section,
-.currency-table-section,
-.history-table-section {
-  transition: all 0.3s ease;
-}
-
-.summary-table :deep(.el-table__header th),
-.summary-table :deep(.el-table__body td),
-.summary-table :deep(.el-table__footer td),
-.currency-table :deep(.el-table__header th),
-.currency-table :deep(.el-table__body td),
-.currency-table :deep(.el-table__footer td),
-.history-table :deep(.el-table__header th),
-.history-table :deep(.el-table__body td),
-.history-table :deep(.el-table__footer td) {
-  transition: padding 0.2s ease, font-size 0.2s ease;
 }
 </style>
