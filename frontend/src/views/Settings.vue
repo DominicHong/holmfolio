@@ -314,9 +314,12 @@ const currencySettings = ref({
   primary_currency: 1,
   display_format: 'primary'
 })
+// Placeholder values until loadSettings() runs. The risk-free rate fallback is
+// 0 to match the backend, which uses 0 when no setting row exists; otherwise
+// the form can show a rate that Sharpe calculations are not actually using.
 const portfolioSettings = ref({
   tax_rate: 0.2,
-  risk_free_rate: 1.5,
+  risk_free_rate: 0,
   gold_initial_capital: 10000
 })
 const rateForm = ref({

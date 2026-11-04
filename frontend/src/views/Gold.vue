@@ -241,7 +241,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'Gold' })
 import dayjs from 'dayjs'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { Plus, Refresh, RefreshRight } from '@element-plus/icons-vue'
 import { useGoldStore, usePortfolioStore, useTransactionStore } from '../stores'
@@ -614,6 +614,14 @@ onMounted(async () => {
   } finally {
     initializing = false
   }
+})
+
+// This view is kept alive, so onMounted does not run when the user comes back
+// from Settings. Reload the overview so a changed risk-free rate (used by the
+// Sharpe calculation) is picked up instead of showing the cached response.
+onActivated(() => {
+  if (initializing) return
+  loadOverview()
 })
 </script>
 
