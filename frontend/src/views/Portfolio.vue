@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="title-row">
         <h2 class="page-title">Portfolio Positions</h2>
-        <el-button :icon="Refresh" @click="initializePortfolio" circle aria-label="Refresh" />
+        <el-button :icon="Refresh" @click="reloadPortfolio" circle aria-label="Refresh" />
       </div>
       <div class="position-controls">
         <el-tooltip content="Select the date for viewing positions, or as the end date when recalculating positions for every day from the first transaction" placement="top">
@@ -176,10 +176,11 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'Portfolio' })
-import { computed, ref, onMounted, h } from 'vue'
+import { computed, ref, h } from 'vue'
 import { usePortfolioStore, useReferenceStore, useUIStore } from '../stores'
 import SharedDataTable from '../components/SharedDataTable.vue'
 import OverviewCard from '../components/OverviewCard.vue'
+import { usePortfolioRefresh } from '../composables/usePortfolioRefresh'
 import { formatCurrency, formatDate } from '../utils/formatters'
 import { showError, showSuccess, showWarning, handleApiError } from '../utils/errorHandler'
 import { Refresh } from '@element-plus/icons-vue'
@@ -511,29 +512,20 @@ const getSummaryRow = (param: { columns: Array<{ property?: string }>; data: Pos
 // ===== INITIALIZATION FUNCTIONS =====
 
 /**
- * Initialize portfolio data on component creation
- * Fetches portfolios and positions if portfolio exists
+ * Load positions for a portfolio.
+ * Ensures currencies (and thus primaryCurrency) are loaded so the
+ * All Positions / History tables render in the primary currency
+ * instead of each asset's own currency.
  */
-const initializePortfolio = async () => {
-  try {
-    // Ensure currencies (and thus primaryCurrency) are loaded so the
-    // All Positions / History tables render in the primary currency
-    // instead of each asset's own currency.
-    if (!referenceStore.primaryCurrency) {
-      await referenceStore.fetchCurrencies()
-    }
-
-    if (!currentPortfolio.value) {
-      await portfolioStore.fetchPortfolios()
-    }
-
-    if (currentPortfolio.value) {
-      await portfolioStore.fetchPositions(currentPortfolio.value.id, recalculateDate.value)
-    }
-  } catch (error) {
-    handleApiError(error, 'Failed to load portfolio data')
+const loadPortfolio = async (portfolioId: number) => {
+  if (!referenceStore.primaryCurrency) {
+    await referenceStore.fetchCurrencies()
   }
+  await portfolioStore.fetchPositions(portfolioId, recalculateDate.value)
 }
+
+// Reloads on mount, portfolio selection changes, and keep-alive activation.
+const { reload: reloadPortfolio } = usePortfolioRefresh(loadPortfolio)
 
 // ===== DATA OPERATIONS =====
 
@@ -697,11 +689,6 @@ const triggerDownload = (csvContent: string, filename: string): void => {
 
   setTimeout(() => URL.revokeObjectURL(url), 100)
 }
-
-// Initialize on component mount
-onMounted(() => {
-  initializePortfolio()
-})
 </script>
 
 <style scoped>

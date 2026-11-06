@@ -10,6 +10,13 @@ from backend.api.models.transaction import (
     AddDividendsResponse,
 )
 from backend.api.models.position import PositionResponse, DividendPositionResponse, FinancialPositionResponse
+from backend.api.models.portfolio import (
+    PortfolioCreate,
+    PortfolioUpdate,
+    PortfolioSnapshotResponse,
+    CombinedHoldingResponse,
+    PortfolioSummaryResponse,
+)
 from backend.api.models.settings import SettingsResponse
 from backend.api.models.benchmark import BenchmarkResponse, BenchmarkPriceResponse, BenchmarkComponentResponse
 from backend.api.models.tag import AssetTagCreate, AssetTagResponse
@@ -39,6 +46,11 @@ __all__ = [
     "PositionResponse",
     "DividendPositionResponse",
     "FinancialPositionResponse",
+    "PortfolioCreate",
+    "PortfolioUpdate",
+    "PortfolioSnapshotResponse",
+    "CombinedHoldingResponse",
+    "PortfolioSummaryResponse",
     "SettingsResponse",
     "BenchmarkResponse",
     "BenchmarkPriceResponse",

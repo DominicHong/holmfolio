@@ -52,10 +52,11 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'Financial' })
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import { usePortfolioStore } from '../stores'
 import { useUIStore } from '../stores'
 import SharedDataTable from '../components/SharedDataTable.vue'
+import { usePortfolioRefresh } from '../composables/usePortfolioRefresh'
 import { formatDate } from '../utils/formatters'
 import { showError, showSuccess, handleApiError } from '../utils/errorHandler'
 import { Refresh } from '@element-plus/icons-vue'
@@ -95,15 +96,13 @@ const disabledDate = (time: Date): boolean => {
   return time.getTime() > Date.now()
 }
 
-const initializePortfolio = async () => {
-  try {
-    if (!currentPortfolio.value) {
-      await portfolioStore.fetchPortfolios()
-    }
-  } catch (error) {
-    handleApiError(error, 'Failed to load portfolio data')
-  }
+// Financial data is loaded on demand. Clear the previous portfolio's rows as
+// soon as the global selection changes so stale data is never shown.
+const loadFinancialPage = async () => {
+  positions.value = []
 }
+
+usePortfolioRefresh(loadFinancialPage)
 
 const validateOperation = () => {
   if (!currentPortfolio.value) {
@@ -211,10 +210,6 @@ const downloadPositionsCSV = () => {
 const handleRefresh = () => {
   handleShowFinancials()
 }
-
-onMounted(() => {
-  initializePortfolio()
-})
 </script>
 
 <style scoped>

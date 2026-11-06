@@ -201,7 +201,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'Dashboard' })
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { usePortfolioStore } from '../stores'
 import { useAnalyticsStore } from '../stores'
 import { useReferenceStore } from '../stores'
@@ -214,6 +214,7 @@ import SharedDataTable from '../components/SharedDataTable.vue'
 import OverviewCard from '../components/OverviewCard.vue'
 import { useTimeRange } from '../composables/useTimeRange'
 import { useLoading } from '../composables/useLoading'
+import { usePortfolioRefresh } from '../composables/usePortfolioRefresh'
 import { handleApiError } from '../utils/errorHandler'
 import { Refresh } from '@element-plus/icons-vue'
 
@@ -400,52 +401,39 @@ const fetchAllData = async (portfolioId: number) => {
   })
 }
 
-// Initialize dashboard with progressive loading
-const initializeDashboard = async () => {
+// Initialize dashboard for the selected portfolio with progressive loading
+const initializeDashboard = async (portfolioId: number) => {
   try {
-    await portfolioStore.fetchPortfolios()
-    if (currentPortfolio.value) {
-      const portfolioId = currentPortfolio.value.id
+    // Fetch transactions first so the ALL time range is computed from the
+    // selected portfolio's first transaction rather than the previous one.
+    await transactionStore.fetchTransactions(portfolioId)
 
-      // Initialize time range with default values
-      initializeTimeRange()
+    // Initialize time range with default values
+    initializeTimeRange()
 
-      // Load tag categories first and set default category
-      await referenceStore.fetchTagCategories()
-      if (tagCategories.value && tagCategories.value.length > 0) {
-        const defaultCategory = tagCategories.value.find((c: { name: string; id: number }) => c.name === '自定义类别')
-        if (defaultCategory) {
-          selectedAllocationCategory.value = defaultCategory.id
-        }
+    // Load tag categories first and set default category
+    await referenceStore.fetchTagCategories()
+    if (tagCategories.value && tagCategories.value.length > 0) {
+      const defaultCategory = tagCategories.value.find((c: { name: string; id: number }) => c.name === '自定义类别')
+      if (defaultCategory) {
+        selectedAllocationCategory.value = defaultCategory.id
       }
-
-      // Fetch all card data independently
-      await fetchAllData(portfolioId)
     }
+
+    // Fetch all card data independently
+    await fetchAllData(portfolioId)
   } catch (error) {
     handleApiError(error, 'Failed to initialize dashboard')
   }
 }
 
-
-
-// Watchers
-watch(() => portfolioStore.currentPortfolio, (newPortfolio, oldPortfolio) => {
-  // Ignore initial assignment when oldPortfolio is undefined
-  if (oldPortfolio && (newPortfolio?.id !== oldPortfolio.id)) {
-    initializeDashboard()
-  }
-})
+// Reloads on mount, portfolio selection changes, and keep-alive activation.
+const { reload: reloadDashboard } = usePortfolioRefresh(initializeDashboard)
 
 // Refresh
 const handleRefresh = () => {
-  initializeDashboard()
+  reloadDashboard()
 }
-
-// Lifecycle
-onMounted(async () => {
-  await initializeDashboard()
-})
 </script>
 
 <style scoped>

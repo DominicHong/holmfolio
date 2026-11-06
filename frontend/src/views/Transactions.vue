@@ -308,7 +308,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'Transactions' })
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useTransactionStore } from '../stores'
 import { useReferenceStore } from '../stores'
 import { usePortfolioStore } from '../stores'
@@ -318,8 +318,9 @@ import type { Transaction, Asset, MissingDividendItem, CheckDividendsResponse } 
 import dayjs from 'dayjs'
 import SharedDataTable from '../components/SharedDataTable.vue'
 import { STRATEGY_OPTIONS, strategyShortLabel } from '../utils/strategies'
+import { usePortfolioRefresh } from '../composables/usePortfolioRefresh'
 import { ElMessageBox } from 'element-plus'
-import { showError, showSuccess, showWarning, handleApiError } from '../utils/errorHandler'
+import { showSuccess, showWarning, handleApiError } from '../utils/errorHandler'
 import { Refresh } from '@element-plus/icons-vue'
 
 // Stores
@@ -453,23 +454,16 @@ const filteredTransactions = computed(() => {
 })
 
 // Methods
-const initializeData = async () => {
-  try {
-    await portfolioStore.fetchPortfolios()
-    const portfolioId = currentPortfolio.value?.id
-    if (!portfolioId) {
-      showError("No portfolio is provided.")
-      return
-    }
-    await Promise.all([
-      transactionStore.fetchTransactions(portfolioId),
-      referenceStore.fetchCurrencies(),
-      assetStore.fetchAssets()
-    ])
-  } catch (error) {
-    handleApiError(error, 'Failed to load data')
-  }
+const loadTransactions = async (portfolioId: number) => {
+  await Promise.all([
+    transactionStore.fetchTransactions(portfolioId),
+    referenceStore.fetchCurrencies(),
+    assetStore.fetchAssets()
+  ])
 }
+
+// Reloads on mount, portfolio selection changes, and keep-alive activation.
+const { reload: reloadTransactions } = usePortfolioRefresh(loadTransactions)
 
 const getAssetSymbol = (assetId: number | null): string => {
   if (!assetId || !assetStore.assets) return 'N/A'
@@ -768,13 +762,8 @@ const addAllDividends = () => {
 
 // Refresh
 const handleRefresh = () => {
-  initializeData()
+  reloadTransactions()
 }
-
-// Lifecycle
-onMounted(() => {
-  initializeData()
-})
 </script>
 
 <style scoped>

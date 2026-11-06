@@ -7,7 +7,15 @@ from sqlmodel import Session, select
 
 from backend.db import get_session
 from backend.db.models import Portfolio, Transaction, Position, Settings, Asset, Currency
-from backend.api.models import PositionResponse, CurrencyResponse, DividendPositionResponse, FinancialPositionResponse
+from backend.api.models import (
+    PositionResponse,
+    CurrencyResponse,
+    DividendPositionResponse,
+    FinancialPositionResponse,
+    PortfolioCreate,
+    PortfolioUpdate,
+    PortfolioSummaryResponse,
+)
 from backend.services import PortfolioService, PositionService, CurrencyService
 from backend.services.calculation import CalculationService
 
@@ -17,17 +25,60 @@ router = APIRouter()
 @router.get("/", response_model=list[Portfolio])
 def get_portfolios(session: Session = Depends(get_session)):
     """Get all portfolios."""
-    portfolios = session.exec(select(Portfolio)).all()
+    portfolios = session.exec(select(Portfolio).order_by(Portfolio.id)).all()
     return portfolios
 
 
 @router.post("/", response_model=Portfolio)
-def create_portfolio(portfolio: Portfolio, session: Session = Depends(get_session)):
-    """Create a new portfolio."""
+def create_portfolio(
+    data: PortfolioCreate,
+    session: Session = Depends(get_session),
+):
+    """Create a new portfolio.
+
+    When no base currency is given, the global primary currency is used so the
+    portfolio's values line up with every existing calculation.
+    """
+    base_currency_id = data.base_currency_id
+    if base_currency_id is None:
+        base_currency_id = CurrencyService(session).get_primary_currency().id
+
+    if not session.get(Currency, base_currency_id):
+        raise HTTPException(status_code=400, detail="Base currency not found")
+
+    portfolio = Portfolio(
+        name=data.name,
+        description=data.description,
+        base_currency_id=base_currency_id,
+    )
     session.add(portfolio)
     session.commit()
     session.refresh(portfolio)
     return portfolio
+
+
+@router.get("/summary", response_model=PortfolioSummaryResponse)
+def get_portfolio_summary(
+    as_of_date: date | None = None,
+    session: Session = Depends(get_session),
+):
+    """Get a snapshot of every portfolio plus their combined totals.
+
+    This route must stay before ``GET /{portfolio_id}`` because FastAPI
+    otherwise tries to parse "summary" as an integer portfolio id.
+    """
+    service = PortfolioService(session)
+    result = service.get_portfolio_summary(as_of_date)
+
+    currency = result["primary_currency"]
+    result["primary_currency"] = CurrencyResponse(
+        id=currency.id,
+        code=currency.code,
+        name=currency.name,
+        symbol=currency.symbol,
+        is_primary=currency.is_primary,
+    )
+    return result
 
 
 @router.get("/{portfolio_id}", response_model=Portfolio)
@@ -37,6 +88,61 @@ def get_portfolio(portfolio_id: int, session: Session = Depends(get_session)):
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     return portfolio
+
+
+@router.put("/{portfolio_id}", response_model=Portfolio)
+def update_portfolio(
+    portfolio_id: int,
+    data: PortfolioUpdate,
+    session: Session = Depends(get_session),
+):
+    """Update a portfolio's name or description."""
+    portfolio = session.get(Portfolio, portfolio_id)
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(portfolio, key, value)
+
+    session.add(portfolio)
+    session.commit()
+    session.refresh(portfolio)
+    return portfolio
+
+
+@router.delete("/{portfolio_id}")
+def delete_portfolio(portfolio_id: int, session: Session = Depends(get_session)):
+    """Delete a portfolio together with its positions and transactions.
+
+    The last remaining portfolio cannot be deleted, so the application always
+    has a portfolio to fall back to.
+    """
+    portfolio = session.get(Portfolio, portfolio_id)
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+
+    portfolio_count = len(session.exec(select(Portfolio)).all())
+    if portfolio_count <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete the last portfolio",
+        )
+
+    positions = session.exec(
+        select(Position).where(Position.portfolio_id == portfolio_id)
+    ).all()
+    for position in positions:
+        session.delete(position)
+
+    transactions = session.exec(
+        select(Transaction).where(Transaction.portfolio_id == portfolio_id)
+    ).all()
+    for transaction in transactions:
+        session.delete(transaction)
+
+    session.delete(portfolio)
+    session.commit()
+    return {"message": "Successfully deleted portfolio"}
 
 
 @router.get("/{portfolio_id}/positions", response_model=list[PositionResponse])

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import dayjs from 'dayjs'
 import apiClient from '@/utils/apiClient'
+import { usePortfolioStore } from '@/stores/portfolio'
 
 interface AnalyticsOptions {
   startDate?: string | null
@@ -77,7 +78,9 @@ export const useAnalyticsStore = defineStore('analytics', {
       if (options.endDate) params.end_date = options.endDate
       if (options.benchmarkId) params.benchmark_id = options.benchmarkId
       const response = await apiClient.get(`/portfolios/${portfolioId}/performance-metrics`, { params })
-      this.setPortfolioStats(response.data)
+      if (usePortfolioStore().currentPortfolioId === portfolioId) {
+        this.setPortfolioStats(response.data)
+      }
       return response.data
     },
 
@@ -103,7 +106,9 @@ export const useAnalyticsStore = defineStore('analytics', {
       }
 
       const response = await apiClient.get(`/portfolios/${portfolioId}/performance-history`, { params })
-      this.setPerformanceHistory(response.data)
+      if (usePortfolioStore().currentPortfolioId === portfolioId) {
+        this.setPerformanceHistory(response.data)
+      }
       return response.data
     },
 
@@ -116,7 +121,9 @@ export const useAnalyticsStore = defineStore('analytics', {
         params.benchmark_id = options.benchmarkId
       }
       const response = await apiClient.get(`/portfolios/${portfolioId}/recent-returns`, { params })
-      this.setRecentReturns(response.data)
+      if (usePortfolioStore().currentPortfolioId === portfolioId) {
+        this.setRecentReturns(response.data)
+      }
       return response.data
     },
 
@@ -129,7 +136,9 @@ export const useAnalyticsStore = defineStore('analytics', {
         params.tag_category_id = options.tagCategoryId
       }
       const response = await apiClient.get(`/portfolios/${portfolioId}/allocation`, { params })
-      this.setAssetAllocation(response.data.asset_allocation || {})
+      if (usePortfolioStore().currentPortfolioId === portfolioId) {
+        this.setAssetAllocation(response.data.asset_allocation || {})
+      }
       return response.data
     },
 
@@ -141,7 +150,9 @@ export const useAnalyticsStore = defineStore('analytics', {
           tag_category_id: options.tagCategoryId
         }
         const response = await apiClient.get(`/portfolios/${portfolioId}/tag-correlation`, { params })
-        this.setTagCorrelation(response.data)
+        if (usePortfolioStore().currentPortfolioId === portfolioId) {
+          this.setTagCorrelation(response.data)
+        }
         return response.data
       } catch (error) {
         this.setTagCorrelation(null)
@@ -159,7 +170,9 @@ export const useAnalyticsStore = defineStore('analytics', {
           frequency: options.frequency || 'daily',
         }
         const response = await apiClient.get(`/portfolios/${portfolioId}/tag-beta`, { params })
-        this.setTagBeta(response.data)
+        if (usePortfolioStore().currentPortfolioId === portfolioId) {
+          this.setTagBeta(response.data)
+        }
         return response.data
       } catch (error) {
         this.setTagBeta(null)
@@ -182,7 +195,9 @@ export const useAnalyticsStore = defineStore('analytics', {
           params.top_n = options.topN
         }
         const response = await apiClient.get(`/portfolios/${portfolioId}/asset-beta`, { params })
-        this.setAssetBetaMvTop10(response.data)
+        if (usePortfolioStore().currentPortfolioId === portfolioId) {
+          this.setAssetBetaMvTop10(response.data)
+        }
         return response.data
       } catch (error) {
         this.setAssetBetaMvTop10(null)
@@ -200,7 +215,9 @@ export const useAnalyticsStore = defineStore('analytics', {
           top_n: options.topN || 1000,
         }
         const response = await apiClient.get(`/portfolios/${portfolioId}/asset-beta`, { params })
-        this.setAssetBetaTopBottom(response.data)
+        if (usePortfolioStore().currentPortfolioId === portfolioId) {
+          this.setAssetBetaTopBottom(response.data)
+        }
         return response.data
       } catch (error) {
         this.setAssetBetaTopBottom(null)

@@ -315,7 +315,7 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'Analytics' })
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useAnalyticsStore } from '../stores'
 import { useReferenceStore } from '../stores'
 import { useTransactionStore } from '../stores'
@@ -329,7 +329,8 @@ import AssetBetaChart from '../components/AssetBetaChart.vue'
 import { formatPercentage, formatNumber } from '../utils/formatters'
 import { useTimeRange } from '../composables/useTimeRange'
 import { useLoading } from '../composables/useLoading'
-import { showWarning, handleApiError } from '../utils/errorHandler'
+import { usePortfolioRefresh } from '../composables/usePortfolioRefresh'
+import { handleApiError } from '../utils/errorHandler'
 import { Refresh } from '@element-plus/icons-vue'
 
 // Stores
@@ -338,9 +339,6 @@ const referenceStore = useReferenceStore()
 const transactionStore = useTransactionStore()
 const portfolioStore = usePortfolioStore()
 const assetStore = useAssetStore()
-
-// Local state to prevent concurrent requests
-const isInitializing = ref(false)
 
 // Benchmark selection
 const selectedBenchmarkId = ref<number | null>(null)
@@ -680,32 +678,15 @@ const fetchAllData = async (portfolioId: number) => {
   })
 }
 
-
-
-// Initialize analytics
-const initializeAnalytics = async () => {
-  if (isInitializing.value) return
-  isInitializing.value = true
-
+// Initialize analytics for the selected portfolio
+const initializeAnalytics = async (portfolioId: number) => {
   try {
-    // Ensure portfolios are loaded and current portfolio is set
-    if (!portfolioStore.currentPortfolio) {
-      await portfolioStore.fetchPortfolios()
-    }
-
-    // Check if we have a valid portfolio ID
-    if (!portfolioStore.currentPortfolioId) {
-      showWarning('Please create or select a portfolio first')
-      return
-    }
-
-    const portfolioId: number = portfolioStore.currentPortfolioId
+    // Fetch transactions first so the ALL time range is computed from the
+    // selected portfolio's first transaction rather than the previous one.
+    await transactionStore.fetchTransactions(portfolioId)
 
     // Initialize time range with default values (1 year)
     initializeTimeRange()
-
-    // Fetch transactions first (needed for time range calculations)
-    await transactionStore.fetchTransactions(portfolioId)
 
     // Fetch benchmarks and set default (CSI 300 Total)
     await referenceStore.fetchBenchmarks()
@@ -732,31 +713,16 @@ const initializeAnalytics = async () => {
     await fetchAllData(portfolioId)
   } catch (error) {
     handleApiError(error, 'Failed to load analytics data')
-  } finally {
-    isInitializing.value = false
   }
 }
+
+// Reloads on mount, portfolio selection changes, and keep-alive activation.
+const { reload: reloadAnalytics } = usePortfolioRefresh(initializeAnalytics)
 
 // Refresh
 const handleRefresh = () => {
-  initializeAnalytics()
+  reloadAnalytics()
 }
-
-// Lifecycle hooks
-onMounted(() => {
-  initializeAnalytics()
-})
-
-// Watchers
-watch(
-  () => portfolioStore.currentPortfolio,
-  (newPortfolio, oldPortfolio) => {
-    // Ignore initial assignment when oldPortfolio is undefined
-    if (oldPortfolio && (newPortfolio?.id !== oldPortfolio.id)) {
-      initializeAnalytics()
-    }
-  }
-)
 
 </script>
 

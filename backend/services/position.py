@@ -190,11 +190,10 @@ class PositionService(BaseService):
         portfolio_id: int,
         end_date: date,
     ) -> dict:
-        """Recalculate and save positions for every day from the first transaction date to end_date.
+        """Rebuild and save positions from the first transaction date to end_date.
 
-        Existing positions in the range are deleted first, then positions for every day
-        are recomputed by reusing ``compute_period_end_positions`` one day at a time so that
-        each day's calculation builds on the previous day's saved snapshot.
+        All existing positions for the portfolio are deleted first. The rebuild
+        must start from a clean slate.
 
         Args:
             portfolio_id: The portfolio ID
@@ -205,21 +204,18 @@ class PositionService(BaseService):
         """
         start_date = self.get_first_transaction_date(portfolio_id)
 
+        existing_positions = self.session.exec(
+            select(Position).where(Position.portfolio_id == portfolio_id)
+        ).all()
+        for pos in existing_positions:
+            self.session.delete(pos)
+        self.session.commit()
+
         if not start_date:
             return {"start_date": None, "end_date": end_date, "days_processed": 0}
 
         if start_date > end_date:
             return {"start_date": start_date, "end_date": end_date, "days_processed": 0}
-
-        existing_positions = self.session.exec(
-            select(Position)
-            .where(Position.portfolio_id == portfolio_id)
-            .where(Position.position_date >= start_date)
-            .where(Position.position_date <= end_date)
-        ).all()
-        for pos in existing_positions:
-            self.session.delete(pos)
-        self.session.commit()
 
         days_processed = 0
         current_date = start_date

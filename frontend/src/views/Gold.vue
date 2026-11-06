@@ -591,15 +591,27 @@ async function handleTransactionAction(actionName: string, row: Record<string, a
 // /gold/overview request alongside the explicit load at the end of
 // initialization.
 let initializing = true
+let loadedPortfolioId: number | undefined
 
 watch([selectedAssetId, selectedStrategy, dateRange], () => {
   if (initializing) return
   loadOverview()
 })
 
+watch(
+  () => portfolioStore.currentPortfolioId,
+  async (portfolioId) => {
+    if (initializing || !portfolioId || portfolioId === loadedPortfolioId) return
+    loadedPortfolioId = portfolioId
+    await transactionStore.fetchTransactions(portfolioId)
+    await loadOverview()
+  }
+)
+
 onMounted(async () => {
   try {
     await portfolioStore.fetchPortfolios()
+    loadedPortfolioId = portfolioStore.currentPortfolioId
     await goldStore.fetchAssets()
     if (!selectedAssetId.value && goldStore.assets.length > 0) {
       selectedAssetId.value = goldStore.assets[0].id

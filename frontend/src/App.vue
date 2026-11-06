@@ -11,6 +11,8 @@
           <span v-show="!isCollapsed" class="logo-text">HolmFolio</span>
         </div>
 
+        <PortfolioSelector :collapsed="isCollapsed" />
+
         <el-menu
           :default-active="$route.path"
           :collapse="isCollapsed"
@@ -19,6 +21,10 @@
           router
           class="sidebar-menu"
         >
+          <el-menu-item index="/portfolios">
+            <el-icon><Wallet /></el-icon>
+            <span>Overview</span>
+          </el-menu-item>
           <el-menu-item index="/">
             <el-icon><HomeFilled /></el-icon>
             <span>Dashboard</span>
@@ -99,6 +105,7 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useUIStore } from './stores/ui'
+import PortfolioSelector from './components/PortfolioSelector.vue'
 import {
   TrendCharts,
   HomeFilled,
@@ -110,13 +117,15 @@ import {
   Coin,
   GoldMedal,
   Fold,
-  Expand
+  Expand,
+  Wallet
 } from '@element-plus/icons-vue'
 
 const uiStore = useUIStore()
 
 const cachedViewNames = [
   'Dashboard',
+  'Portfolios',
   'Portfolio',
   'Financial',
   'Gold',

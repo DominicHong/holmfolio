@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import apiClient from '@/utils/apiClient'
+import { usePortfolioStore } from '@/stores/portfolio'
 import type { Asset, GoldOverview } from '@/types/models'
 
 interface GoldOverviewParams {
@@ -40,7 +41,9 @@ export const useGoldStore = defineStore('gold', {
 
     async fetchOverview(params: GoldOverviewParams): Promise<GoldOverview> {
       const response = await apiClient.get<GoldOverview>('/gold/overview', { params })
-      this.setOverview(response.data)
+      if (usePortfolioStore().currentPortfolioId === params.portfolio_id) {
+        this.setOverview(response.data)
+      }
       return response.data
     },
 

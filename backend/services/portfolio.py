@@ -3,8 +3,19 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from collections import defaultdict
+from sqlalchemy import func
 from sqlmodel import select
-from backend.db.models import Asset, AssetTag, Currency, Position, Settings, StockInfo, Tag
+from backend.db.models import (
+    Asset,
+    AssetTag,
+    Currency,
+    Portfolio,
+    Position,
+    Settings,
+    StockInfo,
+    Tag,
+    Transaction,
+)
 from backend.services.base import BaseService
 from backend.services.currency import CurrencyService
 from backend.services.price import PriceService
@@ -111,6 +122,177 @@ class PortfolioService(BaseService):
             "total_value": total_value,
             "positions": positions_value,
             "calculation_date": as_of_date,
+        }
+
+    def get_portfolio_summary(self, as_of_date: date | None = None) -> dict:
+        """Build a snapshot across all portfolios for a given date.
+
+        Values are converted to the global primary currency. ``quantity`` is
+        never summed across different assets because each asset has its own
+        native unit (shares, grams, fund units, currency units, ...). Combined
+        holdings aggregate the same asset across portfolios only.
+        """
+        if as_of_date is None:
+            as_of_date = date.today()
+
+        portfolios = self.session.exec(
+            select(Portfolio).order_by(Portfolio.id)
+        ).all()
+        primary_currency = self.currency_service.get_primary_currency()
+
+        snapshots = []
+        all_asset_ids: set[int] = set()
+        for portfolio in portfolios:
+            value_data = self.calculate_portfolio_value(portfolio.id, as_of_date)
+            snapshots.append((portfolio, value_data))
+            all_asset_ids.update(
+                position["asset_id"] for position in value_data["positions"]
+            )
+
+        asset_map = self.get_asset_map(all_asset_ids)
+        currency_map = {
+            currency.id: currency
+            for currency in self.session.exec(select(Currency)).all()
+        }
+
+        first_transaction_rows = self.session.exec(
+            select(
+                Transaction.portfolio_id,
+                func.min(Transaction.trade_date),
+            ).group_by(Transaction.portfolio_id)
+        ).all()
+        first_transaction_dates = {
+            portfolio_id: first_date
+            for portfolio_id, first_date in first_transaction_rows
+        }
+
+        portfolio_items = []
+        total_value = Decimal("0")
+        total_pnl = Decimal("0")
+        total_cash = Decimal("0")
+        allocation = defaultdict(Decimal)
+        combined: dict[int, dict] = {}
+
+        for portfolio, value_data in snapshots:
+            portfolio_value = Decimal(str(value_data["total_value"]))
+            portfolio_pnl = Decimal("0")
+            portfolio_cash = Decimal("0")
+            holding_count = 0
+
+            for position in value_data["positions"]:
+                asset = asset_map.get(position["asset_id"])
+                if not asset:
+                    continue
+
+                market_value_primary = Decimal(
+                    str(position.get("market_value_primary") or 0)
+                )
+                total_pnl_primary = Decimal(
+                    str(position.get("total_pnl_primary") or 0)
+                )
+                quantity = Decimal(str(position.get("quantity") or 0))
+
+                portfolio_pnl += total_pnl_primary
+
+                if asset.type == "cash":
+                    portfolio_cash += market_value_primary
+                elif quantity != 0:
+                    holding_count += 1
+
+                if market_value_primary > 0:
+                    allocation[asset.type] += market_value_primary
+
+                # Cash is reported separately; combined holdings contain only
+                # non-cash assets so mixed native units never get mixed.
+                if asset.type == "cash" or quantity == 0:
+                    continue
+
+                currency = currency_map.get(asset.currency_id)
+                entry = combined.setdefault(
+                    asset.id,
+                    {
+                        "asset_id": asset.id,
+                        "symbol": asset.symbol,
+                        "name": asset.name,
+                        "type": asset.type,
+                        "currency_code": currency.code if currency else "",
+                        "currency_symbol": currency.symbol if currency else "",
+                        "quantity": Decimal("0"),
+                        "market_value": Decimal("0"),
+                        "market_value_primary": Decimal("0"),
+                        "total_pnl_primary": Decimal("0"),
+                        "portfolio_ids": set(),
+                    },
+                )
+                entry["quantity"] += quantity
+                entry["market_value"] += Decimal(
+                    str(position.get("market_value") or 0)
+                )
+                entry["market_value_primary"] += market_value_primary
+                entry["total_pnl_primary"] += total_pnl_primary
+                entry["portfolio_ids"].add(portfolio.id)
+
+            total_value += portfolio_value
+            total_pnl += portfolio_pnl
+            total_cash += portfolio_cash
+
+            portfolio_items.append(
+                {
+                    "id": portfolio.id,
+                    "name": portfolio.name,
+                    "description": portfolio.description,
+                    "total_value": float(portfolio_value),
+                    "total_pnl": float(portfolio_pnl),
+                    "cash_value": float(portfolio_cash),
+                    "holding_count": holding_count,
+                    "value_weight": 0.0,
+                    "first_transaction_date": first_transaction_dates.get(
+                        portfolio.id
+                    ),
+                }
+            )
+
+        # Portfolio weights are relative to the combined value. When the total
+        # is non-positive (e.g. a portfolio with heavily negative cash), weights
+        # are left at zero rather than producing misleading percentages.
+        total_value_float = float(total_value)
+        if total_value_float > 0:
+            for item in portfolio_items:
+                item["value_weight"] = item["total_value"] / total_value_float
+
+        allocation_total = sum(allocation.values(), Decimal("0"))
+        allocation_by_type = {}
+        if allocation_total > 0:
+            allocation_by_type = {
+                asset_type: float(value / allocation_total)
+                for asset_type, value in allocation.items()
+            }
+
+        combined_holdings = []
+        for entry in combined.values():
+            entry = dict(entry)
+            entry["quantity"] = float(entry["quantity"])
+            entry["market_value"] = float(entry["market_value"])
+            entry["market_value_primary"] = float(entry["market_value_primary"])
+            entry["total_pnl_primary"] = float(entry["total_pnl_primary"])
+            entry["portfolio_count"] = len(entry.pop("portfolio_ids"))
+            combined_holdings.append(entry)
+
+        combined_holdings.sort(
+            key=lambda item: item["market_value_primary"], reverse=True
+        )
+
+        return {
+            "as_of_date": as_of_date,
+            "primary_currency": primary_currency,
+            "portfolios": portfolio_items,
+            "total_value": total_value_float,
+            "total_pnl": float(total_pnl),
+            "total_cash": float(total_cash),
+            "portfolio_count": len(portfolios),
+            "asset_count": len(combined_holdings),
+            "allocation_by_type": allocation_by_type,
+            "combined_holdings": combined_holdings,
         }
 
     def twr(self, portfolio_id: int, start_date: date, end_date: date) -> dict:

@@ -1,10 +1,49 @@
 export interface Portfolio {
   id: number
   name: string
-  description?: string
+  description?: string | null
   base_currency_id?: number
   created_at?: string
   updated_at?: string
+}
+
+export interface PortfolioSummaryItem {
+  id: number
+  name: string
+  description?: string | null
+  total_value: number
+  total_pnl: number
+  cash_value: number
+  holding_count: number
+  value_weight: number
+  first_transaction_date?: string | null
+}
+
+export interface CombinedHolding {
+  asset_id: number
+  symbol: string
+  name: string
+  type: string
+  currency_code: string
+  currency_symbol: string
+  quantity: number
+  market_value: number
+  market_value_primary: number
+  total_pnl_primary: number
+  portfolio_count: number
+}
+
+export interface PortfolioSummary {
+  as_of_date: string
+  primary_currency: Currency
+  portfolios: PortfolioSummaryItem[]
+  total_value: number
+  total_pnl: number
+  total_cash: number
+  portfolio_count: number
+  asset_count: number
+  allocation_by_type: Record<string, number>
+  combined_holdings: CombinedHolding[]
 }
 
 export interface Position {

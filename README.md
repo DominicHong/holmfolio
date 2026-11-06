@@ -31,7 +31,8 @@ HolmFolio is an evidence-based investing personal asset management system built 
 ### Core Features
 
 - **Multi-currency Support**: Track assets in CNY, USD, HKD, EUR with automatic currency conversion (direct and inverse rate lookups supported)
-- **Portfolio Management**: Comprehensive portfolio tracking with positions, transactions, and performance metrics
+- **Multi-portfolio Management**: Create, edit, delete, and switch between multiple portfolios. Every transaction and position is scoped to a portfolio; all portfolios are valued in the global primary currency. The selected portfolio is remembered across page navigation and browser reloads.
+- **Portfolio Overview**: A dedicated `/portfolios` page shows each portfolio's value, P&L, cash, holdings and weight, plus combined totals, allocation, and holdings aggregated across portfolios.
 - **Transaction Processing**: Support for buy/sell/dividends/splits/cash flows with CSV/ZIP import (including Xueqiu/雪球 format)
 - **Real-time Pricing**: Integration with AKShare and THS (同花顺) data sources with automatic backfill on startup
 - **Advanced Analytics**:
@@ -282,8 +283,19 @@ Use the provided startup scripts to launch both servers:
 - Top positions with current values and P&L
 - Recent transactions
 
+### Portfolios (`/portfolios`)
+
+- Create, edit, and delete portfolios (the last remaining portfolio cannot be deleted)
+- Snapshot of every portfolio as of a chosen date: total value, P&L, cash, holding count, and value weight
+- Combined totals across all portfolios
+- Combined asset allocation and combined non-cash holdings aggregated by asset
+- Select any portfolio as the active one; the choice is stored in `localStorage` and survives navigation and page reloads
+
+All portfolios are valued in the global primary currency configured in Settings. Quantities are kept in each asset's native unit (shares, fund units, grams, etc.) and are only summed for the same asset across portfolios — never across different assets.
+
 ### Portfolio (`/portfolio`)
 
+- Shows positions for the currently selected portfolio
 - Current positions with real-time market values (in original and primary currency)
 - Unrealized P&L calculations per position
 - Position recalculation controls
@@ -349,8 +361,10 @@ The FastAPI backend provides comprehensive REST APIs. Visit `http://localhost:80
 | `/api/v1/currencies`                           | Currency management and exchange rates                 |
 | `/api/v1/assets`                               | Asset registry, metadata, and price data               |
 | `/api/v1/transactions`                         | Transaction CRUD operations                            |
-| `/api/v1/portfolios`                           | Portfolio management                                   |
-| `/api/v1/portfolios/{id}/positions`            | Current/as-of positions                                |
+| `/api/v1/portfolios`                           | Portfolio list/create                                  |
+| `/api/v1/portfolios/summary`                   | All-portfolio snapshot and combined holdings           |
+| `/api/v1/portfolios/{id}`                      | Get/update/delete a portfolio                          |
+| `/api/v1/portfolios/{id}/positions`            | Current/as-of positions for a portfolio                |
 | `/api/v1/portfolios/{id}/financial-positions`  | Financial data (dividends, net income, equity)         |
 | `/api/v1/portfolios/{id}/performance-history`  | Historical performance time series                     |
 | `/api/v1/portfolios/{id}/performance-metrics`  | TWR, Sharpe, drawdown, volatility                      |

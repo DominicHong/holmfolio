@@ -103,13 +103,13 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'PositionDetail' })
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
 import { usePortfolioStore, useTransactionStore, useAssetStore, useUIStore } from '../stores'
 import SharedDataTable from '../components/SharedDataTable.vue'
+import { usePortfolioRefresh } from '../composables/usePortfolioRefresh'
 import { formatCurrency, formatDate, formatQuantity, formatPercentage } from '../utils/formatters'
-import { handleApiError } from '../utils/errorHandler'
 
 const route = useRoute()
 const router = useRouter()
@@ -128,7 +128,6 @@ const assetId = computed<number>(() => {
 
 // Computed properties from stores
 const loading = computed(() => uiStore.loading)
-const currentPortfolio = computed(() => portfolioStore.currentPortfolio)
 const positions = computed(() => portfolioStore.positions)
 
 // Find the asset for this position
@@ -198,37 +197,24 @@ const goBack = () => {
 }
 
 const handleRefresh = () => {
-  initialize()
+  reloadPositionDetail()
 }
 
-// Initialize data
-const initialize = async () => {
-  try {
-    if (!currentPortfolio.value) {
-      await portfolioStore.fetchPortfolios()
-    }
-
-    const portfolioId = currentPortfolio.value?.id
-    if (!portfolioId) return
-
-    const tasks = []
-    if (assetStore.assets.length === 0) {
-      tasks.push(assetStore.fetchAssets())
-    }
-    if (positions.value.length === 0) {
-      tasks.push(portfolioStore.fetchPositions(portfolioId))
-    }
-    tasks.push(transactionStore.fetchTransactions(portfolioId))
-
-    await Promise.all(tasks)
-  } catch (error) {
-    handleApiError(error, 'Failed to load position detail')
+// Load the position and its transactions for the selected portfolio.
+const loadPositionDetail = async (portfolioId: number) => {
+  const tasks = []
+  if (assetStore.assets.length === 0) {
+    tasks.push(assetStore.fetchAssets())
   }
+  // Always refetch positions: the store may still contain the previous
+  // portfolio's rows when the global selection changes.
+  tasks.push(portfolioStore.fetchPositions(portfolioId))
+  tasks.push(transactionStore.fetchTransactions(portfolioId))
+
+  await Promise.all(tasks)
 }
 
-onMounted(() => {
-  initialize()
-})
+const { reload: reloadPositionDetail } = usePortfolioRefresh(loadPositionDetail)
 </script>
 
 <style scoped>

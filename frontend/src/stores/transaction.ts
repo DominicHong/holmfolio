@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import apiClient from '@/utils/apiClient'
+import { usePortfolioStore } from '@/stores/portfolio'
 import type { AddDividendsResponse, CheckDividendsResponse, MissingDividendItem, Transaction } from '@/types/models'
 
 interface TransactionState {
@@ -41,7 +42,9 @@ export const useTransactionStore = defineStore('transaction', {
 
     async fetchTransactions(portfolioId: number): Promise<Transaction[]> {
       const response = await apiClient.get<Transaction[]>('/transactions/', { params: { portfolio_id: portfolioId } })
-      this.setTransactions(response.data)
+      if (usePortfolioStore().currentPortfolioId === portfolioId) {
+        this.setTransactions(response.data)
+      }
       return response.data
     },
 

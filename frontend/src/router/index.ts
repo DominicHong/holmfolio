@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
+import Portfolios from '../views/Portfolios.vue'
 import Portfolio from '../views/Portfolio.vue'
 import PositionDetail from '../views/PositionDetail.vue'
 import Transactions from '../views/Transactions.vue'
@@ -15,6 +16,12 @@ const routes = [
     path: '/',
     name: 'Dashboard',
     component: Dashboard,
+    meta: { keepAlive: true }
+  },
+  {
+    path: '/portfolios',
+    name: 'Portfolios',
+    component: Portfolios,
     meta: { keepAlive: true }
   },
   {
