@@ -114,7 +114,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="Action" prop="action">
-              <el-select v-model="transactionForm.action" style="width: 100%">
+              <el-select v-model="transactionForm.action" style="width: 100%" @change="recalculateAmount({ action: $event })">
                 <el-option label="Buy" value="buy" />
                 <el-option label="Sell" value="sell" />
                 <el-option label="Dividends" value="dividends" />
@@ -141,14 +141,14 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="Quantity" prop="quantity">
-              <el-input-number v-model="transactionForm.quantity" :precision="2" style="width: 100%" />
+              <el-input-number v-model="transactionForm.quantity" :precision="2" style="width: 100%" @input="recalculateAmount({ quantity: $event })" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="Price" prop="price">
-              <el-input-number v-model="transactionForm.price" :precision="2" style="width: 100%" />
+              <el-input-number v-model="transactionForm.price" :precision="2" style="width: 100%" @input="recalculateAmount({ price: $event })" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -160,7 +160,7 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="Fees" prop="fees">
-              <el-input-number v-model="transactionForm.fees" :precision="2" style="width: 100%" />
+              <el-input-number v-model="transactionForm.fees" :precision="2" style="width: 100%" @input="recalculateAmount({ fees: $event })" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -380,11 +380,85 @@ const transactionForm = reactive<TransactionFormData>({
   notes: ''
 })
 
+const roundAmount = (value: number): number => Math.round(value * 100) / 100
+
+interface AmountOverrides {
+  action?: string
+  quantity?: number | null
+  price?: number | null
+  fees?: number | null
+}
+
+/**
+ * Keep Amount in sync for buys and sells:
+ * buy = Quantity × Price + Fees, sell = Quantity × Price − Fees.
+ *
+ * Overrides carry the value from an `input`/`change` event because Element Plus
+ * emits those before the v-model update. Programmatic form fills (e.g. editing
+ * an existing transaction) emit no events, so stored amounts are not rewritten.
+ */
+const recalculateAmount = (overrides: AmountOverrides = {}): void => {
+  const action = overrides.action ?? transactionForm.action
+  if (action !== 'buy' && action !== 'sell') return
+
+  const quantity =
+    overrides.quantity !== undefined ? overrides.quantity : transactionForm.quantity
+  const price =
+    overrides.price !== undefined ? overrides.price : transactionForm.price
+  if (quantity === null || price === null) return
+
+  const fees =
+    (overrides.fees !== undefined ? overrides.fees : transactionForm.fees) || 0
+  const gross = quantity * price
+  transactionForm.amount = roundAmount(
+    action === 'buy' ? gross + fees : gross - fees
+  )
+  // Drop a stale mismatch error once the amount is derived again
+  transactionFormRef.value?.clearValidate('amount')
+}
+
+const validateAmountMatchesFormula = (
+  _rule: unknown,
+  value: number | null | undefined,
+  callback: (error?: Error) => void
+): void => {
+  const action = transactionForm.action
+  if ((action !== 'buy' && action !== 'sell') || value === null || value === undefined) {
+    callback()
+    return
+  }
+
+  const { quantity, price } = transactionForm
+  if (quantity === null || price === null) {
+    callback()
+    return
+  }
+
+  const gross = quantity * price
+  const fees = transactionForm.fees || 0
+  const expected = roundAmount(action === 'buy' ? gross + fees : gross - fees)
+
+  if (Math.abs(value - expected) > 0.01) {
+    const operator = action === 'buy' ? '+' : '−'
+    callback(
+      new Error(
+        `Amount must equal Quantity × Price ${operator} Fees = ${expected.toFixed(2)}`
+      )
+    )
+    return
+  }
+
+  callback()
+}
+
 const transactionRules = {
   trade_date: [{ required: true, message: 'Please select date', trigger: 'change' }],
   action: [{ required: true, message: 'Please select action', trigger: 'change' }],
   asset_id: [{ required: true, message: 'Please select an asset', trigger: 'change' }],
-  amount: [{ required: true, message: 'Please enter amount', trigger: 'blur' }]
+  amount: [
+    { required: true, message: 'Please enter amount', trigger: 'blur' },
+    { validator: validateAmountMatchesFormula, trigger: ['blur', 'change'] }
+  ]
 }
 
 // Computed properties
