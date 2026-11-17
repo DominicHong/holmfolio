@@ -491,6 +491,18 @@ const resetFilters = () => {
   filters.symbol = ''
 }
 
+// Position recalculation rebuilds every day since the first transaction and can
+// take a while. Run it after the tables are refreshed, and catch its errors
+// separately so a recalculation failure never blocks the list from updating.
+// The store action is left untouched because other pages rely on it throwing.
+const recalculatePositionsSafely = async (portfolioId: number): Promise<void> => {
+  try {
+    await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
+  } catch (error) {
+    handleApiError(error, 'Failed to recalculate positions')
+  }
+}
+
 const saveTransaction = async () => {
   try {
     if (!transactionFormRef.value) return
@@ -520,9 +532,9 @@ const saveTransaction = async () => {
 
     showAddDialog.value = false
     resetTransactionForm()
-    // Recalculate positions and refresh transactions after the change
-    await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
+    // Refresh the list first; then recalculate positions in the background
     await transactionStore.fetchTransactions(portfolioId)
+    await recalculatePositionsSafely(portfolioId)
   } catch (error) {
     handleApiError(error, 'Failed to save transaction')
   }
@@ -573,10 +585,7 @@ const deleteTransaction = async (transaction: Transaction): Promise<void> => {
     )
 
     await transactionStore.deleteTransaction(transaction.id)
-    await portfolioStore.recalculatePositions({
-      portfolioId: transaction.portfolio_id,
-      asOfDate: null
-    })
+    await recalculatePositionsSafely(transaction.portfolio_id)
     showSuccess('Transaction deleted successfully')
   } catch (error) {
     if (error !== 'cancel') {
@@ -605,7 +614,7 @@ const confirmDeleteAll = async () => {
     )
 
     await transactionStore.deleteAllTransactions(portfolioId)
-    await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
+    await recalculatePositionsSafely(portfolioId)
     showSuccess('All transactions deleted successfully')
   } catch (error) {
     if (error !== 'cancel') {
@@ -625,12 +634,13 @@ const handleXueqiuImportFile = async (file: File): Promise<boolean> => {
     const result = await transactionStore.importXueqiuTransactions(file, portfolioId)
     showSuccess(result.message)
     showXueqiuImportDialog.value = false
-    // Recalculate positions and refresh transactions and assets after import
-    await portfolioStore.recalculatePositions({ portfolioId, asOfDate: null })
+    // Show the imported rows immediately; position recalculation is slow and
+    // must not delay or block the transaction list refresh
     await Promise.all([
       transactionStore.fetchTransactions(portfolioId),
       assetStore.fetchAssets()
     ])
+    await recalculatePositionsSafely(portfolioId)
   } catch (error) {
     handleApiError(error, 'Failed to import Xueqiu transactions')
   }

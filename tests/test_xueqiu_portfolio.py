@@ -5,13 +5,16 @@ with reference values from xueqiu_portfolio.csv.
 """
 
 import csv
+import shutil
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from sqlmodel import Session, select
+from sqlalchemy import event
+from sqlmodel import Session, create_engine, select
 
+from backend.db.base import ROOT_PATH, enable_sqlite_fk
 from backend.db.models import (
     Asset,
     Currency,
@@ -19,7 +22,6 @@ from backend.db.models import (
     Portfolio,
     Position,
 )
-from backend.db import get_engine
 from backend.services import CurrencyService, PositionService, PortfolioService
 
 
@@ -183,11 +185,33 @@ def get_test_values(session: Session, portfolio_id: int, test_date: date) -> dic
 
 
 @pytest.fixture
-def db_session():
-    """Create a database session for testing."""
-    engine = get_engine()
-    with Session(engine) as session:
-        yield session
+def db_session(tmp_path):
+    """Create a session on a temporary copy of the production database.
+
+    The test needs the owner's production data to compare against the xueqiu
+    reference, but it must never write to it: position calculation persists
+    rows. Copying the database (including WAL sidecars) into ``tmp_path``
+    keeps every write isolated from ``backend/portfolio.db``.
+    """
+    production_db = Path(ROOT_PATH) / "portfolio.db"
+    if not production_db.exists():
+        pytest.skip("Production database not found")
+
+    test_db = tmp_path / "portfolio.db"
+    shutil.copy2(production_db, test_db)
+    # SQLite may keep uncheckpointed transactions in sidecar files
+    for suffix in ("-wal", "-shm"):
+        sidecar = production_db.with_name(production_db.name + suffix)
+        if sidecar.exists():
+            shutil.copy2(sidecar, test_db.with_name(test_db.name + suffix))
+
+    engine = create_engine(f"sqlite:///{test_db}", echo=False)
+    event.listen(engine, "connect", enable_sqlite_fk)
+    try:
+        with Session(engine) as session:
+            yield session
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture
