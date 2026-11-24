@@ -1,9 +1,10 @@
 """Parity tests for the ported gold strategies against holmes-lab backtests.
 
 Reference results (holmes-lab strategies/au9999_cta, window
-2018-01-01 ~ 2026-09-01, one-way commission 0.02% + slippage 0.02%):
-- 518880 s1a: 53 closed trades, first 2018-10-22 -> 2018-11-01, final 3.3494x
-- AU9999 s1a: 34 closed trades, first 2018-10-19 -> 2018-11-13, final 3.7268x
+2018-01-01 ~ 2026-09-01, one-way commission 0.02% + slippage 0.02%;
+s1a includes the 2026-11 SMA10 reference entry band):
+- 518880 s1a: 50 closed trades, first 2018-10-22 -> 2018-11-01, final 3.4458x
+- AU9999 s1a: 33 closed trades, first 2018-10-19 -> 2018-11-13, final 3.7951x
 - 518880 s1b: 53 closed trades, first 2018-10-22 -> 2018-11-01, final 3.0545x
 - AU9999 s1b: 34 closed trades, first 2018-10-19 -> 2018-11-13, final 3.4653x
 """
@@ -21,32 +22,62 @@ START = date(2018, 1, 1)
 END = date(2026, 9, 1)
 
 
-def _run(csv_path: str, strategy_key: str) -> dict:
+def _run(csv_path: str, strategy_key: str, **strategy_params) -> dict:
     bars = load_daily_csv(csv_path)
     bars = bars[(bars["date"] >= START) & (bars["date"] <= END)]
     frame = bars.set_index(pd.to_datetime(bars.pop("date")))
     frame["openinterest"] = 0.0
-    return run_gold_backtest(frame, STRATEGIES[strategy_key])
+    return run_gold_backtest(
+        frame, STRATEGIES[strategy_key], strategy_params=strategy_params or None
+    )
 
 
 def test_s1a_518880_round_trips_match_reference():
     result = _run("data/518880.SH.csv", "s1a_ma_cross_trailing")
     trips = result["round_trips"]
 
-    assert len(trips) == 53
+    assert len(trips) == 50
     assert trips[0]["entry_date"] == date(2018, 10, 22)
     assert trips[0]["exit_date"] == date(2018, 11, 1)
-    assert result["nav_values"][-1] == pytest.approx(334.937, rel=1e-4)
+    assert result["nav_values"][-1] == pytest.approx(344.583, rel=1e-4)
 
 
 def test_s1a_au9999_round_trips_match_reference():
     result = _run("data/AU9999_Daily.csv", "s1a_ma_cross_trailing")
     trips = result["round_trips"]
 
-    assert len(trips) == 34
+    assert len(trips) == 33
     assert trips[0]["entry_date"] == date(2018, 10, 19)
     assert trips[0]["exit_date"] == date(2018, 11, 13)
-    assert result["nav_values"][-1] == pytest.approx(372.684, rel=1e-4)
+    assert result["nav_values"][-1] == pytest.approx(379.509, rel=1e-4)
+
+
+@pytest.mark.parametrize("csv_path", ["data/518880.SH.csv", "data/AU9999_Daily.csv"])
+def test_s1a_reference_band_filters_entries(csv_path):
+    """The SMA10 band must skip entries: disabling it yields more trades."""
+    with_band = _run(csv_path, "s1a_ma_cross_trailing")
+    without_band = _run(csv_path, "s1a_ma_cross_trailing", ref_band_atr=0.0)
+
+    assert len(with_band["round_trips"]) < len(without_band["round_trips"])
+
+
+@pytest.mark.parametrize("csv_path", ["data/518880.SH.csv", "data/AU9999_Daily.csv"])
+def test_s1a_entries_are_outside_reference_band(csv_path):
+    """No buy may be confirmed while close hugs SMA10 from above."""
+    result = _run(csv_path, "s1a_ma_cross_trailing")
+    series = result["series"]
+    index_by_date = {day: index for index, day in enumerate(result["series_dates"])}
+    buys = [signal for signal in result["signals"] if signal["action"] == "buy"]
+
+    assert buys
+    assert len(series["ref"]) == len(result["series_dates"])
+    assert len(series["ref_upper"]) == len(result["series_dates"])
+    for signal in buys:
+        index = index_by_date[signal["signal_date"]]
+        distance = (
+            series["close"][index] - series["ref"][index]
+        ) / series["atr"][index]
+        assert not 0.0 < distance <= 1.5
 
 
 def test_s1b_518880_round_trips_match_reference():

@@ -2,7 +2,9 @@
 
 Ported from holmes-lab strategies/au9999_cta/s1b_vol_target_ma_cross.py.
 
-Timing is identical to s1a:
+Timing follows s1a, except that s1a's SMA10 reference entry band (added
+2026-11) is intentionally not applied here, keeping this the sizing-only
+variant of the original timing rules:
 - Entry: while SMA30 > SMA90 and close > SMA90 trend is up; when flat, buy at
   next open without waiting for a fresh golden cross.
 - Trailing stop: stop = max(entry - 2.5xATR(entry day),

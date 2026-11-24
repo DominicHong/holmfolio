@@ -11,7 +11,7 @@ STRATEGIES: dict[str, type] = {
 }
 
 STRATEGY_LABELS: dict[str, str] = {
-    "s1a_ma_cross_trailing": "s1a Dual-MA trend + ATR trailing stop",
+    "s1a_ma_cross_trailing": "s1a Dual-MA trend + SMA10 band + ATR trailing stop",
     "s1b_vol_target_ma_cross": "s1b Dual-MA trend + vol-target position sizing",
 }
 

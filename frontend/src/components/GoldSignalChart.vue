@@ -67,6 +67,27 @@ function overlayDataset(
   }
 }
 
+const BUFFER_BAND_LABEL = 'Buffer Band'
+const BUFFER_BAND_COLOR = '#409EFF'
+
+// Dotted polyline drawn with round caps so each dash renders as a filled dot
+function bufferBandDataset(data: (number | null)[]) {
+  return {
+    label: BUFFER_BAND_LABEL,
+    data,
+    borderColor: BUFFER_BAND_COLOR,
+    backgroundColor: BUFFER_BAND_COLOR,
+    borderWidth: 2,
+    borderDash: [0.5, 5],
+    borderCapStyle: 'round' as const,
+    fill: false,
+    tension: 0.2,
+    pointRadius: 0,
+    pointHoverRadius: 0,
+    spanGaps: true
+  }
+}
+
 function markerDataset(
   label: string,
   points: (number | null)[],
@@ -113,6 +134,8 @@ function buildConfig(): ChartConfiguration | null {
   const datasets: any[] = [overlayDataset('Close', close, '#303133')]
   if (props.series.fast) datasets.push(overlayDataset('Fast MA', props.series.fast, '#67C23A'))
   if (props.series.slow) datasets.push(overlayDataset('Slow MA', props.series.slow, '#909399'))
+  if (props.series.ref) datasets.push(bufferBandDataset(props.series.ref))
+  if (props.series.ref_upper) datasets.push(bufferBandDataset(props.series.ref_upper))
   if (props.series.mid) datasets.push(overlayDataset('Middle Band', props.series.mid, '#E6A23C', true))
   if (props.series.top) datasets.push(overlayDataset('Upper Band', props.series.top, '#E6A23C', true))
   if (props.series.bottom) datasets.push(overlayDataset('Lower Band', props.series.bottom, '#E6A23C', true))
@@ -140,12 +163,22 @@ function buildConfig(): ChartConfiguration | null {
         }
       },
       plugins: {
-        legend: { display: true, position: 'top' },
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            // Both Buffer Band lines share one label; show a single legend entry
+            filter: (item: { text: string; datasetIndex: number }, data: { datasets: { label?: string }[] }) =>
+              data.datasets.findIndex((dataset) => dataset.label === item.text) === item.datasetIndex
+          }
+        },
         zoom: buildZoomPluginOptions(['y'], (chart) => syncXRange(chart, positionChart.value)),
         datalabels: { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
+          filter: (item: { dataset: { label?: string } }, index: number, items: { dataset: { label?: string } }[]) =>
+            items.findIndex((other) => other.dataset.label === item.dataset.label) === index,
           callbacks: {
             label: (context: { dataset: { label?: string }; dataIndex: number; parsed: { y: number | null } }) => {
               if (context.dataset.label === 'Buy' || context.dataset.label === 'Sell') {

@@ -110,8 +110,12 @@ def _insert_bars(
 
 
 def _insert_rising_bars(test_db, asset, count: int = 400) -> list[date]:
-    """Insert steadily rising weekday bars (open = close - 1) and return dates."""
-    return _insert_bars(test_db, asset, [1.002] * count)
+    """Insert fast-rising weekday bars (open = close - 1) and return dates.
+
+    A 1% daily gain keeps close well above SMA10 + 1.5xATR, so the s1a
+    reference band treats the trend as established and enters.
+    """
+    return _insert_bars(test_db, asset, [1.01] * count)
 
 
 class TestGoldService:

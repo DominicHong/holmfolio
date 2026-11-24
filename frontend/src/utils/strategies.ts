@@ -19,7 +19,7 @@ export interface StrategyOption {
 export const STRATEGY_OPTIONS: StrategyOption[] = [
   {
     value: 's1a_ma_cross_trailing',
-    label: 's1a Dual-MA trend + ATR trailing stop (default)',
+    label: 's1a Dual-MA trend + SMA10 band + ATR trailing stop (default)',
     shortLabel: 's1a',
     isDefault: true
   },
